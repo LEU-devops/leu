@@ -51,17 +51,19 @@ export async function createModality(input: { code?: unknown; name?: unknown; ty
 
 // --- BRACKET ---
 
-/** A match row joined with the names of the teams in it. */
+/** A match row joined with the names of its teams and venue. */
 export interface BracketMatch extends Match {
     team_a_name: string | null;
     team_b_name: string | null;
+    venue_name: string | null;
 }
 
 export async function getBracket(modalityCode: string): Promise<BracketMatch[]> {
     return db("matches as m")
         .leftJoin("teams as ta", "ta.id", "m.team_a_id")
         .leftJoin("teams as tb", "tb.id", "m.team_b_id")
-        .select("m.*", "ta.name as team_a_name", "tb.name as team_b_name")
+        .leftJoin("venues as v", "v.id", "m.venue_id")
+        .select("m.*", "ta.name as team_a_name", "tb.name as team_b_name", "v.name as venue_name")
         .where("m.modality_code", modalityCode)
         .orderBy([{ column: "m.round" }, { column: "m.position" }]);
 }
@@ -285,6 +287,41 @@ export async function clearMatchResult(modalityCode: string, matchId: number): P
             const slot = match.next_slot === "a" ? "team_a_id" : "team_b_id";
             await trx("matches").where({ id: match.next_match_id }).update({ [slot]: null });
         }
+    });
+
+    return getBracket(modalityCode);
+}
+
+// --- SCHEDULE ---
+
+export interface MatchScheduleInput {
+    scheduledAt?: unknown;
+    venueId?: unknown;
+}
+
+/** Sets when and where a match happens. Either field can be null to clear it. */
+export async function setMatchSchedule(modalityCode: string, matchId: number, input: MatchScheduleInput): Promise<BracketMatch[]> {
+    let scheduledAt: string | null = null;
+    if (input.scheduledAt !== null && input.scheduledAt !== undefined) {
+        const date = typeof input.scheduledAt === "string" ? new Date(input.scheduledAt) : new Date(NaN);
+        if (Number.isNaN(date.getTime()))
+            throw new ValidationError("scheduledAt must be an ISO 8601 date string or null");
+        scheduledAt = date.toISOString();
+    }
+
+    let venueId: number | null = null;
+    if (input.venueId !== null && input.venueId !== undefined) {
+        if (typeof input.venueId !== "number" || !Number.isInteger(input.venueId))
+            throw new ValidationError("venueId must be an integer or null");
+        const venue = await db("venues").where({ id: input.venueId }).first();
+        if (!venue)
+            throw new ValidationError(`Venue ${input.venueId} not found`);
+        venueId = input.venueId;
+    }
+
+    await db.transaction(async (trx) => {
+        const match = await findMatch(trx, modalityCode, matchId);
+        await trx("matches").where({ id: match.id }).update({ scheduled_at: scheduledAt, venue_id: venueId });
     });
 
     return getBracket(modalityCode);

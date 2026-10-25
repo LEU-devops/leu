@@ -3,24 +3,26 @@ import { NavLink, useParams } from 'react-router-dom'
 import BracketBuilder from '../components/bracket/BracketBuilder'
 import BracketView from '../components/bracket/BracketView'
 import Loading from '../components/Loading'
-import { getBracket, getModalities, getTeams } from '../services/competition'
-import type { BracketMatch, Modality, Team } from '../types/competition'
+import { getBracket, getModalities, getTeams, getVenues } from '../services/competition'
+import type { BracketMatch, Modality, Team, Venue } from '../types/competition'
 
 /** Mounted with `key={modality.code}`, so every state below starts fresh when the modality changes. */
 function ModalityContent({ modality }: { modality: Modality }) {
     const [matches, setMatches] = useState<BracketMatch[] | null>(null)
     const [teams, setTeams] = useState<Team[]>([])
+    const [venues, setVenues] = useState<Venue[]>([])
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (modality.type !== 'chaveamento') return
         let cancelled = false
 
-        Promise.all([getBracket(modality.code), getTeams()])
-            .then(([bracket, allTeams]) => {
+        Promise.all([getBracket(modality.code), getTeams(), getVenues()])
+            .then(([bracket, allTeams, allVenues]) => {
                 if (cancelled) return
                 setMatches(bracket)
                 setTeams(allTeams)
+                setVenues(allVenues)
             })
             .catch(() => {
                 if (!cancelled) setError('Não foi possível carregar o chaveamento.')
@@ -40,7 +42,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
     if (matches.length === 0)
         return <BracketBuilder key={modality.code} code={modality.code} teams={teams} onCreated={setMatches} />
 
-    return <BracketView matches={matches} onChange={setMatches} />
+    return <BracketView matches={matches} venues={venues} onChange={setMatches} />
 }
 
 export default function BracketsPage() {

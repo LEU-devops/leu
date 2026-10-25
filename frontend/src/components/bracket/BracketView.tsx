@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { getToken } from '../../services/auth'
-import { stageLabel, type BracketMatch } from '../../types/competition'
+import { formatSchedule, stageLabel, type BracketMatch, type Venue } from '../../types/competition'
 import BracketLayout, { type BracketRound } from './BracketLayout'
-import MatchResultDialog from './MatchResultDialog'
+import MatchDialog from './MatchDialog'
 import TeamLogo from './TeamLogo'
 
 function TeamRow({ name, score, isWinner }: { name: string | null; score: string | null; isWinner: boolean }) {
@@ -17,15 +17,19 @@ function TeamRow({ name, score, isWinner }: { name: string | null; score: string
     )
 }
 
-function MatchCard({ match, onClick }: { match: BracketMatch; onClick?: () => void }) {
+function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePath: string | null; onClick?: () => void }) {
+    const when = formatSchedule(match.scheduled_at)
     const rows = (
         <>
             <TeamRow name={match.team_a_name} score={match.score_a} isWinner={match.winner_id !== null && match.winner_id === match.team_a_id} />
             <div className="border-t border-white/10" />
             <TeamRow name={match.team_b_name} score={match.score_b} isWinner={match.winner_id !== null && match.winner_id === match.team_b_id} />
-            {match.status === 'live' ? (
-                <p className="border-t border-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-red-400">Ao vivo</p>
-            ) : null}
+            <div className="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-zinc-400">
+                {match.status === 'live' ? <span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span> : null}
+                <span className={`shrink-0 ${when ? '' : 'italic text-zinc-600'}`}>{when ?? 'Sem data'}</span>
+                <span className="text-zinc-600">·</span>
+                <span className={`truncate ${venuePath ? '' : 'italic text-zinc-600'}`} title={venuePath ?? undefined}>{venuePath ?? 'Sem local'}</span>
+            </div>
         </>
     )
     const className = 'w-56 overflow-hidden rounded-xl border border-white/10 bg-black/65 text-left shadow-lg shadow-black/30'
@@ -40,13 +44,15 @@ function MatchCard({ match, onClick }: { match: BracketMatch; onClick?: () => vo
 
 interface Props {
     matches: BracketMatch[]
-    /** Called with the updated bracket after a result is set or cleared. */
+    venues: Venue[]
+    /** Called with the updated bracket after a match is edited. */
     onChange?: (matches: BracketMatch[]) => void
 }
 
-export default function BracketView({ matches, onChange }: Props) {
+export default function BracketView({ matches, venues, onChange }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null)
     const canEdit = Boolean(getToken()) && onChange !== undefined
+    const venuePathById = new Map(venues.map((v) => [v.id, v.path]))
 
     const totalRounds = Math.max(...matches.map((m) => m.round))
     const size = 2 ** totalRounds
@@ -60,8 +66,8 @@ export default function BracketView({ matches, onChange }: Props) {
             cells: Array.from({ length: size / 2 ** round }, (_, position) => {
                 const match = byPosition.get(position)
                 if (!match) return null
-                const isEditable = canEdit && match.team_a_id !== null && match.team_b_id !== null
-                return <MatchCard key={match.id} match={match} onClick={isEditable ? () => setEditingId(match.id) : undefined} />
+                const venuePath = match.venue_id === null ? null : (venuePathById.get(match.venue_id) ?? match.venue_name)
+                return <MatchCard key={match.id} match={match} venuePath={venuePath} onClick={canEdit ? () => setEditingId(match.id) : undefined} />
             }),
         })
     }
@@ -70,14 +76,15 @@ export default function BracketView({ matches, onChange }: Props) {
 
     return (
         <>
-            {canEdit ? <p className="mb-3 text-sm text-zinc-500">Clique em uma partida para dar ou alterar o resultado.</p> : null}
+            {canEdit ? <p className="mb-3 text-sm text-zinc-500">Clique em uma partida para agendar ou dar o resultado.</p> : null}
             <BracketLayout rounds={rounds} />
             {editing && onChange ? (
-                <MatchResultDialog
+                <MatchDialog
                     key={editing.id}
                     match={editing}
                     nextMatch={matches.find((m) => m.id === editing.next_match_id) ?? null}
                     stage={stageLabel(totalRounds - editing.round)}
+                    venues={venues}
                     onClose={() => setEditingId(null)}
                     onChange={onChange}
                 />

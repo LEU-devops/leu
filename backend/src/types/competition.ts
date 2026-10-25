@@ -14,6 +14,13 @@ export interface Team {
     name: string;
 }
 
+/** Row shape of the `venues` table. */
+export interface Venue {
+    id: number;
+    name: string;
+    parent_id: number | null;
+}
+
 export const STAGES = ["r16", "qf", "sf", "final"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -34,7 +41,8 @@ export interface Match {
     next_match_id: number | null;
     next_slot: "a" | "b" | null;
     status: MatchStatus;
-    scheduled_at: string | null;
+    scheduled_at: string | null;   // ISO 8601
+    venue_id: number | null;
 }
 
 /** Maximum number of teams in a bracket (oitavas de final). */
@@ -44,6 +52,7 @@ declare module "knex/types/tables" {
     interface Tables {
         modalities: Modality;
         teams: Team;
+        venues: Venue;
         matches: Match;
     }
 }

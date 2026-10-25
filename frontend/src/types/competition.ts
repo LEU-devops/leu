@@ -11,6 +11,14 @@ export interface Team {
     name: string
 }
 
+/** A venue with its full path, e.g. "FEF > Complexo de Vôlei > Q1". */
+export interface Venue {
+    id: number
+    name: string
+    parent_id: number | null
+    path: string
+}
+
 export type Stage = 'r16' | 'qf' | 'sf' | 'final'
 export type MatchStatus = 'scheduled' | 'live' | 'finished' | 'walkover'
 
@@ -32,6 +40,8 @@ export interface BracketMatch {
     next_slot: 'a' | 'b' | null
     status: MatchStatus
     scheduled_at: string | null
+    venue_id: number | null
+    venue_name: string | null
 }
 
 export const MAX_BRACKET_TEAMS = 16
@@ -78,4 +88,14 @@ export function byeMatchIndices(size: number, byes: number): Set<number> {
     for (let seed = 1; seed <= byes; seed++)
         matches.add(Math.floor(order.indexOf(seed) / 2))
     return matches
+}
+
+/** "sáb. 25/10 · 14:00" in the viewer's time zone, or null when unscheduled. */
+export function formatSchedule(iso: string | null): string | null {
+    if (!iso) return null
+    const date = new Date(iso)
+    if (Number.isNaN(date.getTime())) return null
+    const day = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(date)
+    const time = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date)
+    return `${day} · ${time}`
 }

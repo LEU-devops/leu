@@ -6,6 +6,7 @@ import { version } from '../package.json'
 import authRoutes from './modules/auth/routes'
 import modalitiesRoutes from './modules/modalities/routes'
 import teamsRoutes from './modules/teams/routes'
+import venuesRoutes from './modules/venues/routes'
 
 import { errorMiddleware } from './middlewares/error.middleware';
 config({ quiet: true })
@@ -34,6 +35,7 @@ app.get("/", (_, res) => {
 app.use('/auth', authRoutes)
 app.use('/modalities', modalitiesRoutes)
 app.use('/teams', teamsRoutes)
+app.use('/venues', venuesRoutes)
 
 app.use(errorMiddleware)
 
