@@ -21,8 +21,8 @@ export async function up(knex: Knex): Promise<void> {
         t.integer("position").notNullable();  // índice dentro da rodada, de cima para baixo
         t.integer("team_a_id").references("id").inTable("teams"); // nulo até o time ser definido
         t.integer("team_b_id").references("id").inTable("teams");
-        t.integer("score_a");
-        t.integer("score_b");
+        t.string("score_a");             // texto livre, ex.: "2", "1 (4)" para pênaltis
+        t.string("score_b");
         t.integer("winner_id").references("id").inTable("teams");
         t.integer("next_match_id").references("id").inTable("matches");
         t.string("next_slot");                // "a" ou "b": em qual lado da próxima partida o vencedor entra

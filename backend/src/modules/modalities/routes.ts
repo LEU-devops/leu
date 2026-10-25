@@ -2,12 +2,14 @@ import { NextFunction, Request, Response, Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/permission.middleware";
 import {
+    clearMatchResult,
     ConflictError,
     createBracket,
     createModality,
     getBracket,
     getModality,
     listModalities,
+    setMatchResult,
     ValidationError,
 } from "./controller";
 
@@ -46,6 +48,20 @@ router.get("/:code/bracket", async (req: Request, res: Response) => {
 router.post("/:code/bracket", ...canManage, async (req: Request, res: Response) => {
     const code = String(req.params.code).toUpperCase();
     res.status(201).json(await createBracket(code, req.body?.slots));
+});
+
+// --- RESULTS ---
+
+/** Body: { "scoreA": "2", "scoreB": "2 (4)", "winner": "a" | "b" }. Responds with the whole bracket. */
+router.put("/:code/matches/:id/result", ...canManage, async (req: Request, res: Response) => {
+    const code = String(req.params.code).toUpperCase();
+    res.json(await setMatchResult(code, Number(req.params.id), req.body ?? {}));
+});
+
+/** Reverts a match to unresolved. Responds with the whole bracket. */
+router.delete("/:code/matches/:id/result", ...canManage, async (req: Request, res: Response) => {
+    const code = String(req.params.code).toUpperCase();
+    res.json(await clearMatchResult(code, Number(req.params.id)));
 });
 
 // Translate the controller errors of this module into HTTP statuses.

@@ -28,8 +28,8 @@ export interface Match {
     position: number;
     team_a_id: number | null;
     team_b_id: number | null;
-    score_a: number | null;
-    score_b: number | null;
+    score_a: string | null;
+    score_b: string | null;
     winner_id: number | null;
     next_match_id: number | null;
     next_slot: "a" | "b" | null;

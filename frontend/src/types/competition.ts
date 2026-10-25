@@ -25,8 +25,8 @@ export interface BracketMatch {
     team_a_name: string | null
     team_b_id: number | null
     team_b_name: string | null
-    score_a: number | null
-    score_b: number | null
+    score_a: string | null
+    score_b: string | null
     winner_id: number | null
     next_match_id: number | null
     next_slot: 'a' | 'b' | null

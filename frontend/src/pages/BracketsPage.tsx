@@ -40,7 +40,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
     if (matches.length === 0)
         return <BracketBuilder key={modality.code} code={modality.code} teams={teams} onCreated={setMatches} />
 
-    return <BracketView matches={matches} />
+    return <BracketView matches={matches} onChange={setMatches} />
 }
 
 export default function BracketsPage() {

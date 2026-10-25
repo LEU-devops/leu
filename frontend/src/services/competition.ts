@@ -20,3 +20,22 @@ export function createBracket(code: string, slots: (string | null)[]): Promise<B
         body: JSON.stringify({ slots }),
     })
 }
+
+export interface MatchResultInput {
+    scoreA: string
+    scoreB: string
+    winner: 'a' | 'b'
+}
+
+/** Sets or replaces a match result. Responds with the whole bracket. */
+export function setMatchResult(code: string, matchId: number, result: MatchResultInput): Promise<BracketMatch[]> {
+    return request(`/modalities/${code}/matches/${matchId}/result`, {
+        method: 'PUT',
+        body: JSON.stringify(result),
+    })
+}
+
+/** Reverts a match to unresolved. Responds with the whole bracket. */
+export function clearMatchResult(code: string, matchId: number): Promise<BracketMatch[]> {
+    return request(`/modalities/${code}/matches/${matchId}/result`, { method: 'DELETE' })
+}

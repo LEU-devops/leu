@@ -203,3 +203,89 @@ export async function createBracket(modalityCode: string, slotsInput: unknown): 
 
     return getBracket(modalityCode);
 }
+
+// --- RESULTS ---
+
+async function findMatch(trx: Knex, modalityCode: string, matchId: number): Promise<Match> {
+    const match = await trx("matches").where({ id: matchId, modality_code: modalityCode }).first();
+    if (!match)
+        throw new ValidationError(`Match ${matchId} not found in modality ${modalityCode}`);
+    return match;
+}
+
+/** A result can only be changed or cleared while the match it feeds is still unresolved. */
+async function assertNextMatchUnresolved(trx: Knex, match: Match) {
+    if (match.next_match_id === null)
+        return;
+    const next = await trx("matches").where({ id: match.next_match_id }).first();
+    if (next && next.winner_id !== null)
+        throw new ConflictError("The next match already has a result; clear it first");
+}
+
+function parseScore(value: unknown, field: string): string | null {
+    if (value === null || value === undefined)
+        return null;
+    if (typeof value !== "string")
+        throw new ValidationError(`${field} must be a string`);
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+}
+
+export interface MatchResultInput {
+    scoreA?: unknown;
+    scoreB?: unknown;
+    winner?: unknown;
+}
+
+/**
+ * Sets (or replaces) the result of a match and places the winner in the next match.
+ * Scores are free text so shootouts and walkovers can be written as the organizers like.
+ */
+export async function setMatchResult(modalityCode: string, matchId: number, input: MatchResultInput): Promise<BracketMatch[]> {
+    const scoreA = parseScore(input.scoreA, "scoreA");
+    const scoreB = parseScore(input.scoreB, "scoreB");
+    if (input.winner !== "a" && input.winner !== "b")
+        throw new ValidationError('winner must be "a" or "b"');
+
+    await db.transaction(async (trx) => {
+        const match = await findMatch(trx, modalityCode, matchId);
+        if (match.team_a_id === null || match.team_b_id === null)
+            throw new ValidationError("Both teams must be defined before setting a result");
+
+        await assertNextMatchUnresolved(trx, match);
+
+        const winnerId = input.winner === "a" ? match.team_a_id : match.team_b_id;
+        await trx("matches")
+            .where({ id: match.id })
+            .update({ score_a: scoreA, score_b: scoreB, winner_id: winnerId, status: "finished" });
+
+        if (match.next_match_id !== null && match.next_slot !== null) {
+            const slot = match.next_slot === "a" ? "team_a_id" : "team_b_id";
+            await trx("matches").where({ id: match.next_match_id }).update({ [slot]: winnerId });
+        }
+    });
+
+    return getBracket(modalityCode);
+}
+
+/** Clears the result of a match and removes its winner from the next match. */
+export async function clearMatchResult(modalityCode: string, matchId: number): Promise<BracketMatch[]> {
+    await db.transaction(async (trx) => {
+        const match = await findMatch(trx, modalityCode, matchId);
+        if (match.winner_id === null)
+            throw new ValidationError("Match has no result to clear");
+
+        await assertNextMatchUnresolved(trx, match);
+
+        await trx("matches")
+            .where({ id: match.id })
+            .update({ score_a: null, score_b: null, winner_id: null, status: "scheduled" });
+
+        if (match.next_match_id !== null && match.next_slot !== null) {
+            const slot = match.next_slot === "a" ? "team_a_id" : "team_b_id";
+            await trx("matches").where({ id: match.next_match_id }).update({ [slot]: null });
+        }
+    });
+
+    return getBracket(modalityCode);
+}
