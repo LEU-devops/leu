@@ -22,7 +22,6 @@ export async function initDatabase() {
             email TEXT PRIMARY KEY,
             password TEXT NOT NULL,
             name TEXT NOT NULL,
-            balance DECIMAL(10, 2) NOT NULL,
             admin BOOLEAN DEFAULT FALSE NOT NULL
         );
 

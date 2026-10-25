@@ -18,9 +18,6 @@ router.post("/login", async (req: Request, res: Response) => {
 
 // --- REGISTER --- This route is primarily only for internal use, it will not be consumed by the frontend
 router.post("/register", async (req: Request, res: Response) => {
-    if (!req.body.email.endsWith("@dac.unicamp.br"))
-        return res.status(403).json({ error: "Can only register email addresses from @dac.unicamp.br" });
-
     await registerUser(req.body)
 
     return res.json({

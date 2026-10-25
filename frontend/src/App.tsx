@@ -1,9 +1,14 @@
-function App() {
+import { Navigate, Route, Routes } from 'react-router-dom'
+import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
+
+export default function App() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-red-950">
-      Placeholder for the app. This is a React + Vite + TailwindCSS project.
-    </div>
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+
+    </Routes>
   )
 }
-
-export default App
