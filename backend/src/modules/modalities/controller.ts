@@ -66,16 +66,26 @@ export async function getBracket(modalityCode: string): Promise<BracketMatch[]> 
         .orderBy([{ column: "m.round" }, { column: "m.position" }]);
 }
 
-function parseTeamNames(input: unknown): string[] {
+/**
+ * Parses the first-round slots of a bracket: an array whose length is the
+ * bracket size (2, 4, 8 or 16). Slots 2k and 2k+1 form first-round match k.
+ * A `null` slot means its opponent has a bye and goes straight to round 2.
+ */
+function parseSlots(input: unknown): (string | null)[] {
     if (!Array.isArray(input))
-        throw new ValidationError("teams must be an array of names");
+        throw new ValidationError("slots must be an array of team names (null for an empty slot)");
 
-    const names = input.map((n) => (typeof n === "string" ? n.trim() : ""));
-    if (names.some((n) => !n))
-        throw new ValidationError("every team name must be a non-empty string");
+    const size = input.length;
+    if (size < 2 || size > MAX_BRACKET_TEAMS || (size & (size - 1)) !== 0)
+        throw new ValidationError(`slots length must be a power of two between 2 and ${MAX_BRACKET_TEAMS}`);
 
-    if (names.length < 2 || names.length > MAX_BRACKET_TEAMS)
-        throw new ValidationError(`teams must have between 2 and ${MAX_BRACKET_TEAMS} names`);
+    const slots = input.map((s) => (s === null ? null : typeof s === "string" ? s.trim() : ""));
+    if (slots.some((s) => s === ""))
+        throw new ValidationError("every slot must be a non-empty team name or null");
+
+    const names = slots.filter((s): s is string => s !== null);
+    if (names.length < 2)
+        throw new ValidationError("a bracket needs at least 2 teams");
 
     const seen = new Set<string>();
     for (const n of names) {
@@ -84,7 +94,13 @@ function parseTeamNames(input: unknown): string[] {
             throw new ValidationError(`duplicate team name: ${n}`);
         seen.add(key);
     }
-    return names;
+
+    for (let match = 0; match < size / 2; match++) {
+        if (slots[2 * match] === null && slots[2 * match + 1] === null)
+            throw new ValidationError(`first-round match ${match} has no teams`);
+    }
+
+    return slots;
 }
 
 /** Finds teams by name, creating the ones that do not exist yet. Keeps the input order. */
@@ -115,15 +131,14 @@ function stageOf(round: number, totalRounds: number): Stage {
 }
 
 /**
- * Creates a single-elimination bracket for a modality.
+ * Creates a single-elimination bracket for a modality from its first-round slots.
  *
- * The bracket has the smallest power-of-two size that fits the teams. When the
- * number of teams is not a power of two, the first teams of the list get a bye:
- * their first-round match is a walkover and they are placed directly in the
- * next round. Teams fill the bracket top to bottom in the order given.
+ * A first-round match with an empty slot is a bye: the match is not created and
+ * its team is placed directly in the corresponding round-2 slot. Which matches
+ * get a bye is up to the caller (the frontend spreads them evenly).
  */
-export async function createBracket(modalityCode: string, teamsInput: unknown): Promise<BracketMatch[]> {
-    const names = parseTeamNames(teamsInput);
+export async function createBracket(modalityCode: string, slotsInput: unknown): Promise<BracketMatch[]> {
+    const slots = parseSlots(slotsInput);
 
     const modality = await getModality(modalityCode);
     if (!modality)
@@ -131,66 +146,58 @@ export async function createBracket(modalityCode: string, teamsInput: unknown): 
     if (modality.type !== "chaveamento")
         throw new ValidationError(`Modality ${modalityCode} is not of type chaveamento`);
 
-    const size = 2 ** Math.ceil(Math.log2(names.length));
+    const size = slots.length;
     const totalRounds = Math.log2(size);
-    const byes = size - names.length;
 
     await db.transaction(async (trx) => {
         const existing = await trx("matches").where({ modality_code: modalityCode }).first();
         if (existing)
             throw new ConflictError(`Modality ${modalityCode} already has a bracket`);
 
+        const names = slots.filter((s): s is string => s !== null);
         const teams = await findOrCreateTeams(trx, names);
+        const teamByName = new Map(teams.map((t) => [t.name, t]));
 
-        // Create rounds from the final backwards so each match knows its next_match_id.
+        async function insertMatch(round: number, position: number, nextIds: number[] | undefined, extra: Partial<Match> = {}) {
+            const [{ id }] = await trx("matches")
+                .insert({
+                    modality_code: modalityCode,
+                    stage: stageOf(round, totalRounds),
+                    round,
+                    position,
+                    next_match_id: nextIds ? nextIds[Math.floor(position / 2)] : null,
+                    next_slot: nextIds ? (position % 2 === 0 ? "a" : "b") : null,
+                    ...extra,
+                })
+                .returning("id");
+            return id as number;
+        }
+
+        // Rounds 2..final are created empty, from the final backwards so each match knows its next_match_id.
         const idsByRound: number[][] = [];
-        for (let round = totalRounds; round >= 1; round--) {
-            const matchesInRound = size / 2 ** round;
-            const nextIds = idsByRound[round + 1];
+        for (let round = totalRounds; round >= 2; round--) {
             const ids: number[] = [];
-
-            for (let position = 0; position < matchesInRound; position++) {
-                const [{ id }] = await trx("matches")
-                    .insert({
-                        modality_code: modalityCode,
-                        stage: stageOf(round, totalRounds),
-                        round,
-                        position,
-                        next_match_id: nextIds ? nextIds[Math.floor(position / 2)] : null,
-                        next_slot: nextIds ? (position % 2 === 0 ? "a" : "b") : null,
-                    })
-                    .returning("id");
-                ids.push(id);
-            }
+            for (let position = 0; position < size / 2 ** round; position++)
+                ids.push(await insertMatch(round, position, idsByRound[round + 1]));
             idsByRound[round] = ids;
         }
 
-        // Fill the first round. The first `byes` teams get a match alone (walkover),
-        // the remaining teams are paired in order.
-        const firstRound = idsByRound[1];
-        let teamIndex = 0;
+        // First round: real matches get created, byes go straight into round 2.
+        const nextIds = idsByRound[2];
+        for (let position = 0; position < size / 2; position++) {
+            const a = slots[2 * position];
+            const b = slots[2 * position + 1];
+            const teamA = a === null ? null : teamByName.get(a)!;
+            const teamB = b === null ? null : teamByName.get(b)!;
 
-        for (let position = 0; position < firstRound.length; position++) {
-            const matchId = firstRound[position];
-            const isBye = position < byes;
-
-            const teamA = teams[teamIndex++];
-            const teamB = isBye ? null : teams[teamIndex++];
-
-            await trx("matches")
-                .where({ id: matchId })
-                .update({
-                    team_a_id: teamA.id,
-                    team_b_id: teamB?.id ?? null,
-                    winner_id: isBye ? teamA.id : null,
-                    status: isBye ? "walkover" : "scheduled",
-                });
-
-            if (isBye && totalRounds > 1) {
-                const nextId = idsByRound[2][Math.floor(position / 2)];
-                const slot = position % 2 === 0 ? "team_a_id" : "team_b_id";
-                await trx("matches").where({ id: nextId }).update({ [slot]: teamA.id });
+            if (teamA && teamB) {
+                await insertMatch(1, position, nextIds, { team_a_id: teamA.id, team_b_id: teamB.id });
+                continue;
             }
+
+            const byeTeam = (teamA ?? teamB)!;
+            const slot = position % 2 === 0 ? "team_a_id" : "team_b_id";
+            await trx("matches").where({ id: nextIds[Math.floor(position / 2)] }).update({ [slot]: byeTeam.id });
         }
     });
 

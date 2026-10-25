@@ -39,10 +39,13 @@ router.get("/:code/bracket", async (req: Request, res: Response) => {
     res.json(await getBracket(code));
 });
 
-/** Body: { "teams": ["Time 1", "Time 2", ...] } (2 to 16 names, bracket order top to bottom). */
+/**
+ * Body: { "slots": ["Time 1", "Time 2", null, "Time 3", ...] }
+ * First-round slots top to bottom (length 2, 4, 8 or 16); null marks a bye for the slot's opponent.
+ */
 router.post("/:code/bracket", ...canManage, async (req: Request, res: Response) => {
     const code = String(req.params.code).toUpperCase();
-    res.status(201).json(await createBracket(code, req.body?.teams));
+    res.status(201).json(await createBracket(code, req.body?.slots));
 });
 
 // Translate the controller errors of this module into HTTP statuses.
