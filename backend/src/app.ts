@@ -4,6 +4,11 @@ import { config } from 'dotenv'
 import { version } from '../package.json'
 
 import authRoutes from './modules/auth/routes'
+import modalitiesRoutes from './modules/modalities/routes'
+import matchesRoutes from './modules/matches/routes'
+import teamsRoutes from './modules/teams/routes'
+import venuesRoutes from './modules/venues/routes'
+import timeSlotsRoutes from './modules/time-slots/routes'
 
 import { errorMiddleware } from './middlewares/error.middleware';
 config({ quiet: true })
@@ -11,10 +16,7 @@ config({ quiet: true })
 const app = express();
 
 app.use(cors({
-    origin: [
-        //"https://leu.com.br",
-        'http://localhost:5173',
-    ],
+
     credentials: true,
 }));
 
@@ -30,6 +32,11 @@ app.get("/", (_, res) => {
 });
 
 app.use('/auth', authRoutes)
+app.use('/modalities', modalitiesRoutes)
+app.use('/matches', matchesRoutes)
+app.use('/teams', teamsRoutes)
+app.use('/venues', venuesRoutes)
+app.use('/time-slots', timeSlotsRoutes)
 
 app.use(errorMiddleware)
 

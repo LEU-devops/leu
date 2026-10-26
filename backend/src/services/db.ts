@@ -1,31 +1,18 @@
-import { createClient } from "@libsql/client";
+import knex from "knex";
 
-import { config } from "dotenv";
+import config from "../../knexfile";
 
-config({ quiet: true });
+export const db = knex(config);
 
-const dbUrl = process.env.LIBSQL_URL;
-if (!dbUrl) {
-    console.error("LIBSQL_URL is not set in the environment variables.");
-    process.exit(1);
-}
-console.log("Connecting to database at", dbUrl);
-
-export const db = createClient({
-    url: dbUrl,
-    authToken: process.env.LIBSQL_AUTH_TOKEN,
-});
-
+/**
+ * In development the schema is migrated automatically on boot.
+ * In production run `npm run migrate` against Turso as a deploy step instead.
+ */
 export async function initDatabase() {
-    await db.executeMultiple(`
-        CREATE TABLE IF NOT EXISTS users (
-            email TEXT PRIMARY KEY,
-            password TEXT NOT NULL,
-            name TEXT NOT NULL,
-            admin BOOLEAN DEFAULT FALSE NOT NULL
-        );
+    if (process.env.NODE_ENV === "production")
+        return;
 
-        PRAGMA foreign_keys = ON;
-    `);
-
+    const [, applied] = await db.migrate.latest();
+    if (applied.length > 0)
+        console.log("Applied migrations:", applied.join(", "));
 }

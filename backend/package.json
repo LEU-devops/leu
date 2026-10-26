@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node dist/src/index.js",
     "build": "npx tsc",
-    "dev": "nodemon --exec ts-node src/index.ts"
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "migrate": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "migrate:make": "knex migrate:make"
   },
   "keywords": [],
   "author": "Rafael Setton",
@@ -14,6 +17,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/bcrypt": "^6.0.0",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
@@ -27,11 +31,13 @@
     "typescript-eslint": "^8.53.1"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.4",
+    "@libsql/knex-libsql": "^0.1.0",
     "bcrypt": "^6.0.0",
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "knex": "^3.3.0"
   }
 }
