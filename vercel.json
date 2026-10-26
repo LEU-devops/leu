@@ -12,6 +12,7 @@
     },
     "backend": {
       "root": "backend",
+      "framework": "express",
       "entrypoint": "src/index.ts",
       "routes": [
         {
