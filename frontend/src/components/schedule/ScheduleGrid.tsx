@@ -1,6 +1,6 @@
 import type { ScheduledMatch, Stage } from '../../types/competition'
 import TeamLogo from '../bracket/TeamLogo'
-import { buildHeader, formatDay, formatTime, ROW_HEIGHT_REM, slotsOf, type Column, type Day } from './layout'
+import { buildHeader, formatDay, formatTime, ROW_HEIGHT_REM, ROWS_PER_SLOT, type Column, type Day } from './layout'
 
 const STAGE_NAMES: Record<Stage, string> = { r16: 'Oitavas', qf: 'Quartas', sf: 'Semifinal', final: 'Final' }
 
@@ -64,7 +64,6 @@ const stickyColumn = 'sticky left-0 z-20 bg-[#0b0b0b]'
 export default function ScheduleGrid({ day, columns }: { day: Day; columns: Column[] }) {
     const header = buildHeader(columns)
     const firstTimeRow = header.depth + 1
-    const slots = slotsOf(day)
 
     return (
         <section className="space-y-3">
@@ -75,7 +74,8 @@ export default function ScheduleGrid({ day, columns }: { day: Day; columns: Colu
                     className="grid"
                     style={{
                         gridTemplateColumns: `4.5rem repeat(${columns.length}, minmax(12rem, 1fr))`,
-                        gridTemplateRows: `repeat(${header.depth}, auto) repeat(${day.rows}, ${ROW_HEIGHT_REM}rem)`,
+                        // One extra row at the bottom holds the closing line and its label.
+                        gridTemplateRows: `repeat(${header.depth}, auto) repeat(${day.rows}, ${ROW_HEIGHT_REM}rem) auto`,
                     }}
                 >
                     {/* Top-left corner above the time axis */}
@@ -98,28 +98,30 @@ export default function ScheduleGrid({ day, columns }: { day: Day; columns: Colu
                         )
                     })}
 
-                    {/* Time axis and horizontal guides, one per 1h30 slot */}
-                    {slots.map((slot) => (
-                        <div key={slot.row} className="contents">
-                            <div
-                                className={`${stickyColumn} border-t border-white/10 px-2 pt-1 text-xs tabular-nums text-zinc-400`}
-                                style={{ gridColumn: 1, gridRow: `${firstTimeRow + slot.row} / span ${slot.rows}` }}
-                            >
-                                {formatTime(slot.time)}
+                    {/* Time axis and horizontal guides: every start and every end 1h30 later */}
+                    {day.lines.map((line, index) => {
+                        const next = day.lines[index + 1]
+                        const span = next ? next.row - line.row : 1
+                        const border = line.kind === 'start' ? 'border-t border-white/10' : 'border-t border-dashed border-white/10'
+                        return (
+                            <div key={line.row} className="contents">
+                                <div
+                                    className={`${stickyColumn} ${border} px-2 pt-1 text-xs tabular-nums ${line.kind === 'start' ? 'text-zinc-400' : 'text-zinc-600'} ${next ? '' : 'pb-1'}`}
+                                    style={{ gridColumn: 1, gridRow: `${firstTimeRow + line.row} / span ${span}` }}
+                                >
+                                    {formatTime(line.time)}
+                                </div>
+                                <div className={border} style={{ gridColumn: `2 / span ${columns.length}`, gridRow: `${firstTimeRow + line.row} / span ${span}` }} />
                             </div>
-                            <div
-                                className="border-t border-white/10"
-                                style={{ gridColumn: `2 / span ${columns.length}`, gridRow: `${firstTimeRow + slot.row} / span ${slot.rows}` }}
-                            />
-                        </div>
-                    ))}
+                        )
+                    })}
 
                     {/* Vertical guides between venues */}
                     {columns.map((_, index) => (
                         <div
                             key={index}
                             className="border-l border-white/10"
-                            style={{ gridColumn: index + 2, gridRow: `${firstTimeRow} / span ${day.rows}` }}
+                            style={{ gridColumn: index + 2, gridRow: `${firstTimeRow} / span ${day.rows + 1}` }}
                         />
                     ))}
 
@@ -130,7 +132,7 @@ export default function ScheduleGrid({ day, columns }: { day: Day; columns: Colu
                             className={`z-10 flex min-h-0 flex-col gap-1 p-1 ${cell.matches.length > 1 ? 'rounded-xl outline outline-red-700/70' : ''}`}
                             style={{
                                 gridColumn: `${cell.colStart + 2} / span ${cell.colEnd - cell.colStart + 1}`,
-                                gridRow: `${firstTimeRow + cell.row} / span 6`,
+                                gridRow: `${firstTimeRow + cell.row} / span ${ROWS_PER_SLOT}`,
                             }}
                             title={cell.matches.length > 1 ? 'Conflito: mais de um jogo no mesmo local e horário' : undefined}
                         >

@@ -1,4 +1,4 @@
-import type { ScheduledMatch, Venue } from '../../types/competition'
+import type { ScheduledMatch, TimeSlot, Venue } from '../../types/competition'
 
 /** How long a match occupies in the table. */
 export const SLOT_MINUTES = 90
@@ -43,12 +43,24 @@ export interface Cell {
     matches: ScheduledMatch[]
 }
 
+/**
+ * A horizontal guide of the table. `start` lines mark a base slot or the start of a match;
+ * `end` lines mark 1h30 after one of those, when no other game starts there.
+ */
+export interface Line {
+    time: Date
+    /** 0-based STEP_MINUTES row from the day start; the last line sits at `rows`. */
+    row: number
+    kind: 'start' | 'end'
+}
+
 export interface Day {
     key: string
     date: Date
     start: Date
     /** Number of STEP_MINUTES rows the day spans. */
     rows: number
+    lines: Line[]
     cells: Cell[]
 }
 
@@ -110,8 +122,11 @@ function localDayKey(date: Date): string {
     return [date.getFullYear(), date.getMonth() + 1, date.getDate()].map((n) => String(n).padStart(2, '0')).join('-')
 }
 
-/** Groups placeable matches by local day and lays each day out on a STEP_MINUTES grid. */
-export function buildDays(matches: ScheduledMatch[], columns: Column[]): Day[] {
+/**
+ * Groups placeable matches by local day and lays each day out on a STEP_MINUTES grid.
+ * The guide lines of a day come from its base slots and its matches: every start, plus 1h30 after each.
+ */
+export function buildDays(matches: ScheduledMatch[], columns: Column[], timeSlots: TimeSlot[] = []): Day[] {
     const columnRange = new Map<number, [number, number]>()
     columns.forEach((column, index) => {
         for (const venue of column.lineage) {
@@ -133,13 +148,27 @@ export function buildDays(matches: ScheduledMatch[], columns: Column[]): Day[] {
         byDay.set(key, day)
     }
 
+    const slotsByDay = new Map<string, number[]>()
+    for (const slot of timeSlots) {
+        const at = new Date(slot.starts_at)
+        if (Number.isNaN(at.getTime())) continue
+        const key = localDayKey(at)
+        slotsByDay.set(key, [...(slotsByDay.get(key) ?? []), at.getTime()])
+    }
+
     return [...byDay.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([key, { date, placed }]) => {
-            const startMs = Math.min(...placed.map((p) => p.at.getTime()))
-            const endMs = Math.max(...placed.map((p) => p.at.getTime())) + SLOT_MINUTES * MINUTE
+            const starts = new Set([...(slotsByDay.get(key) ?? []), ...placed.map((p) => p.at.getTime())])
+            const ends = new Set([...starts].map((ms) => ms + SLOT_MINUTES * MINUTE))
+            const startMs = Math.min(...starts)
+            const endMs = Math.max(...ends)
             const start = new Date(startMs)
-            const rows = Math.ceil((endMs - startMs) / (STEP_MINUTES * MINUTE))
+            const rows = Math.round((endMs - startMs) / (STEP_MINUTES * MINUTE))
+
+            const lines: Line[] = [...new Set([...starts, ...ends])]
+                .sort((a, b) => a - b)
+                .map((ms) => ({ time: new Date(ms), row: Math.round((ms - startMs) / (STEP_MINUTES * MINUTE)), kind: starts.has(ms) ? 'start' : 'end' }))
 
             const cells = new Map<string, Cell>()
             for (const { match, at, range } of placed) {
@@ -150,16 +179,8 @@ export function buildDays(matches: ScheduledMatch[], columns: Column[]): Day[] {
                 cells.set(cellKey, cell)
             }
 
-            return { key, date, start, rows, cells: [...cells.values()] }
+            return { key, date, start, rows, lines, cells: [...cells.values()] }
         })
-}
-
-/** Start times of the 1h30 slots of a day, with the row each one begins at. */
-export function slotsOf(day: Day): { time: Date; row: number; rows: number }[] {
-    const slots: { time: Date; row: number; rows: number }[] = []
-    for (let row = 0; row < day.rows; row += ROWS_PER_SLOT)
-        slots.push({ time: new Date(day.start.getTime() + row * STEP_MINUTES * MINUTE), row, rows: Math.min(ROWS_PER_SLOT, day.rows - row) })
-    return slots
 }
 
 const timeFormat = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })

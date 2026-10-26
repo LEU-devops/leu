@@ -2,21 +2,23 @@ import { useEffect, useMemo, useState } from 'react'
 import Loading from '../components/Loading'
 import ScheduleGrid from '../components/schedule/ScheduleGrid'
 import { buildColumns, buildDays, isPlaceable } from '../components/schedule/layout'
-import { getMatches, getVenues } from '../services/competition'
-import type { ScheduledMatch, Venue } from '../types/competition'
+import { getMatches, getTimeSlots, getVenues } from '../services/competition'
+import type { ScheduledMatch, TimeSlot, Venue } from '../types/competition'
 
 export default function SchedulePage() {
     const [matches, setMatches] = useState<ScheduledMatch[] | null>(null)
     const [venues, setVenues] = useState<Venue[]>([])
+    const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
-        Promise.all([getMatches(), getVenues()])
-            .then(([allMatches, allVenues]) => {
+        Promise.all([getMatches(), getVenues(), getTimeSlots()])
+            .then(([allMatches, allVenues, allSlots]) => {
                 if (cancelled) return
                 setMatches(allMatches)
                 setVenues(allVenues)
+                setTimeSlots(allSlots)
             })
             .catch(() => {
                 if (!cancelled) setError('Não foi possível carregar a tabela de jogos.')
@@ -27,7 +29,7 @@ export default function SchedulePage() {
     }, [])
 
     const columns = useMemo(() => buildColumns(venues, matches ?? []), [venues, matches])
-    const days = useMemo(() => buildDays(matches ?? [], columns), [matches, columns])
+    const days = useMemo(() => buildDays(matches ?? [], columns, timeSlots), [matches, columns, timeSlots])
     const pending = matches ? matches.filter((m) => !isPlaceable(m)).length : 0
 
     return (
