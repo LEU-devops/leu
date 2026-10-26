@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 const links = [
     { to: '/home', label: 'Home' },
     { to: '/chaveamentos', label: 'Chaveamentos' },
+    { to: '/tabela', label: 'Tabela' },
 ]
 
 export default function AppLayout() {

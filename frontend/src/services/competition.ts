@@ -1,4 +1,4 @@
-import type { BracketMatch, Modality, Team, Venue } from '../types/competition'
+import type { BracketMatch, Modality, ScheduledMatch, Team, Venue } from '../types/competition'
 import { request } from './api'
 
 export function getModalities(): Promise<Modality[]> {
@@ -11,6 +11,11 @@ export function getTeams(): Promise<Team[]> {
 
 export function getVenues(): Promise<Venue[]> {
     return request('/venues')
+}
+
+/** Every match of every modality, scheduled ones first. */
+export function getMatches(): Promise<ScheduledMatch[]> {
+    return request('/matches')
 }
 
 export function getBracket(code: string): Promise<BracketMatch[]> {

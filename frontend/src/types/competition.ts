@@ -46,6 +46,11 @@ export interface BracketMatch {
     neutral_team_name: string | null
 }
 
+/** A match of any modality as returned by GET /matches. */
+export interface ScheduledMatch extends BracketMatch {
+    modality_name: string
+}
+
 export const MAX_BRACKET_TEAMS = 16
 export const MIN_BRACKET_TEAMS = 2
 

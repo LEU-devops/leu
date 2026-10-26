@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import BracketsPage from './pages/BracketsPage'
+import SchedulePage from './pages/SchedulePage'
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/home" element={<HomePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
+        <Route path="/tabela" element={<SchedulePage />} />
       </Route>
     </Routes>
   )
