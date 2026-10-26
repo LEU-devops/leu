@@ -5,7 +5,7 @@
   "main": "dist/src/index.js",
   "scripts": {
     "start": "node dist/src/index.js",
-    "build": "npx tsc",
+    "build:tsc": "npx tsc",
     "dev": "nodemon --exec ts-node src/index.ts",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
