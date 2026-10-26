@@ -59,10 +59,9 @@ export default function BracketsPage() {
     const selected = modalities?.find((m) => m.code === code?.toUpperCase()) ?? null
 
     return (
-        <div className="relative z-10 flex min-h-screen flex-col md:flex-row">
+        <div className="flex flex-1 flex-col md:flex-row">
             <aside className="shrink-0 border-b border-white/10 bg-black/65 backdrop-blur md:w-64 md:border-r md:border-b-0">
                 <div className="px-5 pt-5 pb-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red-400">Leu</p>
                     <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Chaveamentos</h1>
                 </div>
 
