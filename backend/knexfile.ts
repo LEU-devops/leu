@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import path from "path";
 import type { Knex } from "knex";
-import Client_Libsql from "@libsql/knex-libsql";
+import Client_Libsql from "./src/services/libsql-dialect";
 
 loadEnv({ quiet: true });
 
