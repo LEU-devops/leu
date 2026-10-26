@@ -14,10 +14,7 @@ config({ quiet: true })
 const app = express();
 
 app.use(cors({
-    origin: [
-        //"https://leu.com.br",
-        'http://localhost:5173',
-    ],
+
     credentials: true,
 }));
 

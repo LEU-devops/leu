@@ -42,6 +42,8 @@ export interface BracketMatch {
     scheduled_at: string | null
     venue_id: number | null
     venue_name: string | null
+    neutral_team_id: number | null
+    neutral_team_name: string | null
 }
 
 export const MAX_BRACKET_TEAMS = 16

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { getToken } from '../../services/auth'
-import { formatSchedule, stageLabel, type BracketMatch, type Venue } from '../../types/competition'
+import { formatSchedule, stageLabel, type BracketMatch, type Team, type Venue } from '../../types/competition'
 import BracketLayout, { type BracketRound } from './BracketLayout'
 import MatchDialog from './MatchDialog'
 import TeamLogo from './TeamLogo'
@@ -17,27 +17,45 @@ function TeamRow({ name, score, isWinner }: { name: string | null; score: string
     )
 }
 
+function InfoLine({ children, muted, title }: { children: ReactNode; muted?: boolean; title?: string }) {
+    return (
+        <p className={`flex min-w-0 items-center gap-1 truncate text-[11px] leading-4 ${muted ? 'italic text-zinc-600' : 'text-zinc-400'}`} title={title}>
+            {children}
+        </p>
+    )
+}
+
 function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePath: string | null; onClick?: () => void }) {
     const when = formatSchedule(match.scheduled_at)
-    const rows = (
+    const content = (
         <>
-            <TeamRow name={match.team_a_name} score={match.score_a} isWinner={match.winner_id !== null && match.winner_id === match.team_a_id} />
-            <div className="border-t border-white/10" />
-            <TeamRow name={match.team_b_name} score={match.score_b} isWinner={match.winner_id !== null && match.winner_id === match.team_b_id} />
-            <div className="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] px-3 py-1 text-[11px] text-zinc-400">
-                {match.status === 'live' ? <span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span> : null}
-                <span className={`shrink-0 ${when ? '' : 'italic text-zinc-600'}`}>{when ?? 'Sem data'}</span>
-                <span className="text-zinc-600">·</span>
-                <span className={`truncate ${venuePath ? '' : 'italic text-zinc-600'}`} title={venuePath ?? undefined}>{venuePath ?? 'Sem local'}</span>
+            {/* Teams */}
+            <div className="w-36 shrink-0">
+                <TeamRow name={match.team_a_name} score={match.score_a} isWinner={match.winner_id !== null && match.winner_id === match.team_a_id} />
+                <div className="border-t border-white/10" />
+                <TeamRow name={match.team_b_name} score={match.score_b} isWinner={match.winner_id !== null && match.winner_id === match.team_b_id} />
+            </div>
+
+            {/* When, where and who runs the table */}
+            <div className="flex w-28 min-w-0 flex-col justify-center gap-0.5 border-l border-white/10 bg-white/3 px-2 py-1">
+                {match.status === 'live' ? <InfoLine><span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span></InfoLine> : null}
+                <InfoLine muted={!when}>{when ?? 'Sem data'}</InfoLine>
+                <InfoLine muted={!venuePath} title={venuePath ?? undefined}>{venuePath ?? 'Sem local'}</InfoLine>
+                {match.neutral_team_name ? (
+                    <InfoLine title={`Neutra: ${match.neutral_team_name}`}>
+                        <span className="shrink-0">Neutra:</span>
+                        <TeamLogo name={match.neutral_team_name} className="h-4 w-4" />
+                    </InfoLine>
+                ) : null}
             </div>
         </>
     )
-    const className = 'w-56 overflow-hidden rounded-xl border border-white/10 bg-black/65 text-left shadow-lg shadow-black/30'
+    const className = 'flex overflow-hidden rounded-xl border border-white/10 bg-black/65 text-left shadow-lg shadow-black/30'
 
-    if (!onClick) return <div className={className}>{rows}</div>
+    if (!onClick) return <div className={className}>{content}</div>
     return (
         <button type="button" onClick={onClick} className={`${className} cursor-pointer transition hover:border-red-800/70 focus-visible:border-red-600 focus-visible:outline-none`}>
-            {rows}
+            {content}
         </button>
     )
 }
@@ -45,11 +63,12 @@ function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePa
 interface Props {
     matches: BracketMatch[]
     venues: Venue[]
+    teams: Team[]
     /** Called with the updated bracket after a match is edited. */
     onChange?: (matches: BracketMatch[]) => void
 }
 
-export default function BracketView({ matches, venues, onChange }: Props) {
+export default function BracketView({ matches, venues, teams, onChange }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null)
     const canEdit = Boolean(getToken()) && onChange !== undefined
     const venuePathById = new Map(venues.map((v) => [v.id, v.path]))
@@ -85,6 +104,7 @@ export default function BracketView({ matches, venues, onChange }: Props) {
                     nextMatch={matches.find((m) => m.id === editing.next_match_id) ?? null}
                     stage={stageLabel(totalRounds - editing.round)}
                     venues={venues}
+                    allTeams={teams}
                     onClose={() => setEditingId(null)}
                     onChange={onChange}
                 />

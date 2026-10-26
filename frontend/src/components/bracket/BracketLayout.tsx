@@ -30,7 +30,7 @@ export default function BracketLayout({ rounds }: { rounds: BracketRound[] }) {
 
     return (
         <div className="overflow-x-auto pb-4">
-            <div className="flex min-w-max items-stretch" style={{ minHeight: firstRoundCells * 128 }}>
+            <div className="flex min-w-max items-stretch" style={{ minHeight: firstRoundCells * 104 }}>
                 {rounds.map((round, roundIndex) => (
                     <div key={round.label} className="flex items-stretch">
                         <div className="flex flex-col">

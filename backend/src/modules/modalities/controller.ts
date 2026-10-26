@@ -51,10 +51,11 @@ export async function createModality(input: { code?: unknown; name?: unknown; ty
 
 // --- BRACKET ---
 
-/** A match row joined with the names of its teams and venue. */
+/** A match row joined with the names of its teams, neutral team and venue. */
 export interface BracketMatch extends Match {
     team_a_name: string | null;
     team_b_name: string | null;
+    neutral_team_name: string | null;
     venue_name: string | null;
 }
 
@@ -62,8 +63,9 @@ export async function getBracket(modalityCode: string): Promise<BracketMatch[]> 
     return db("matches as m")
         .leftJoin("teams as ta", "ta.id", "m.team_a_id")
         .leftJoin("teams as tb", "tb.id", "m.team_b_id")
+        .leftJoin("teams as tn", "tn.id", "m.neutral_team_id")
         .leftJoin("venues as v", "v.id", "m.venue_id")
-        .select("m.*", "ta.name as team_a_name", "tb.name as team_b_name", "v.name as venue_name")
+        .select("m.*", "ta.name as team_a_name", "tb.name as team_b_name", "tn.name as neutral_team_name", "v.name as venue_name")
         .where("m.modality_code", modalityCode)
         .orderBy([{ column: "m.round" }, { column: "m.position" }]);
 }
@@ -297,9 +299,22 @@ export async function clearMatchResult(modalityCode: string, matchId: number): P
 export interface MatchScheduleInput {
     scheduledAt?: unknown;
     venueId?: unknown;
+    neutralTeamId?: unknown;
 }
 
-/** Sets when and where a match happens. Either field can be null to clear it. */
+/** Looks up an optional integer id; null/undefined clears the field. */
+async function parseOptionalId(value: unknown, field: string, table: "venues" | "teams"): Promise<number | null> {
+    if (value === null || value === undefined)
+        return null;
+    if (typeof value !== "number" || !Number.isInteger(value))
+        throw new ValidationError(`${field} must be an integer or null`);
+    const row = await db(table).where({ id: value }).first();
+    if (!row)
+        throw new ValidationError(`${table === "venues" ? "Venue" : "Team"} ${value} not found`);
+    return value;
+}
+
+/** Sets when and where a match happens and which team is its neutral representative. Each field can be null to clear it. */
 export async function setMatchSchedule(modalityCode: string, matchId: number, input: MatchScheduleInput): Promise<BracketMatch[]> {
     let scheduledAt: string | null = null;
     if (input.scheduledAt !== null && input.scheduledAt !== undefined) {
@@ -309,19 +324,16 @@ export async function setMatchSchedule(modalityCode: string, matchId: number, in
         scheduledAt = date.toISOString();
     }
 
-    let venueId: number | null = null;
-    if (input.venueId !== null && input.venueId !== undefined) {
-        if (typeof input.venueId !== "number" || !Number.isInteger(input.venueId))
-            throw new ValidationError("venueId must be an integer or null");
-        const venue = await db("venues").where({ id: input.venueId }).first();
-        if (!venue)
-            throw new ValidationError(`Venue ${input.venueId} not found`);
-        venueId = input.venueId;
-    }
+    const venueId = await parseOptionalId(input.venueId, "venueId", "venues");
+    const neutralTeamId = await parseOptionalId(input.neutralTeamId, "neutralTeamId", "teams");
 
     await db.transaction(async (trx) => {
         const match = await findMatch(trx, modalityCode, matchId);
-        await trx("matches").where({ id: match.id }).update({ scheduled_at: scheduledAt, venue_id: venueId });
+        if (neutralTeamId !== null && (neutralTeamId === match.team_a_id || neutralTeamId === match.team_b_id))
+            throw new ValidationError("The neutral team cannot be one of the teams playing");
+        await trx("matches")
+            .where({ id: match.id })
+            .update({ scheduled_at: scheduledAt, venue_id: venueId, neutral_team_id: neutralTeamId });
     });
 
     return getBracket(modalityCode);

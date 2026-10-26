@@ -47,9 +47,10 @@ export function clearMatchResult(code: string, matchId: number): Promise<Bracket
 export interface MatchScheduleInput {
     scheduledAt: string | null
     venueId: number | null
+    neutralTeamId: number | null
 }
 
-/** Sets when and where a match happens. Responds with the whole bracket. */
+/** Sets when and where a match happens and its neutral team. Responds with the whole bracket. */
 export function setMatchSchedule(code: string, matchId: number, schedule: MatchScheduleInput): Promise<BracketMatch[]> {
     return request(`/modalities/${code}/matches/${matchId}/schedule`, {
         method: 'PUT',

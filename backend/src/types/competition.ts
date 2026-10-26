@@ -43,6 +43,7 @@ export interface Match {
     status: MatchStatus;
     scheduled_at: string | null;   // ISO 8601
     venue_id: number | null;
+    neutral_team_id: number | null; // team acting as neutral representative
 }
 
 /** Maximum number of teams in a bracket (oitavas de final). */

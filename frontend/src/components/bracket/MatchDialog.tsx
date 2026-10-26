@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { clearMatchResult, setMatchResult, setMatchSchedule } from '../../services/competition'
-import type { BracketMatch, Venue } from '../../types/competition'
+import type { BracketMatch, Team, Venue } from '../../types/competition'
 import Select from '../Select'
 import TeamLogo from './TeamLogo'
 
@@ -50,11 +50,13 @@ interface Props {
     nextMatch: BracketMatch | null
     stage: string
     venues: Venue[]
+    /** Every registered team, to pick the neutral representative from. */
+    allTeams: Team[]
     onClose: () => void
     onChange: (matches: BracketMatch[]) => void
 }
 
-export default function MatchDialog({ match, nextMatch, stage, venues, onClose, onChange }: Props) {
+export default function MatchDialog({ match, nextMatch, stage, venues, allTeams, onClose, onChange }: Props) {
     const hasTeams = match.team_a_id !== null && match.team_b_id !== null
     const isFinished = match.winner_id !== null
     const isLocked = nextMatch !== null && nextMatch.winner_id !== null
@@ -64,6 +66,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, onClose, 
     const [date, setDate] = useState(initial.date)
     const [time, setTime] = useState(initial.time)
     const [venueId, setVenueId] = useState<string>(match.venue_id === null ? 'none' : String(match.venue_id))
+    const [neutralId, setNeutralId] = useState<string>(match.neutral_team_id === null ? 'none' : String(match.neutral_team_id))
 
     // Result. String() guards against databases migrated while scores were still integer columns.
     const [scoreA, setScoreA] = useState(String(match.score_a ?? ''))
@@ -111,10 +114,23 @@ export default function MatchDialog({ match, nextMatch, stage, venues, onClose, 
 
     function saveSchedule() {
         const scheduledAt = date ? new Date(`${date}T${time || '00:00'}`).toISOString() : null
-        return run(() => setMatchSchedule(match.modality_code, match.id, { scheduledAt, venueId: venueId === 'none' ? null : Number(venueId) }))
+        return run(() =>
+            setMatchSchedule(match.modality_code, match.id, {
+                scheduledAt,
+                venueId: venueId === 'none' ? null : Number(venueId),
+                neutralTeamId: neutralId === 'none' ? null : Number(neutralId),
+            }),
+        )
     }
 
     const venueOptions = [{ value: 'none', label: 'Sem local' }, ...venues.map((v) => ({ value: String(v.id), label: v.path }))]
+    // The neutral team is another team: the ones playing this match are not offered.
+    const neutralOptions = [
+        { value: 'none', label: 'Sem neutra' },
+        ...allTeams
+            .filter((t) => t.id !== match.team_a_id && t.id !== match.team_b_id)
+            .map((t) => ({ value: String(t.id), label: t.name, icon: <TeamLogo name={t.name} /> })),
+    ]
     const teams: { side: Side; name: string }[] = [
         { side: 'a', name: match.team_a_name ?? 'A definir' },
         { side: 'b', name: match.team_b_name ?? 'A definir' },
@@ -138,13 +154,16 @@ export default function MatchDialog({ match, nextMatch, stage, venues, onClose, 
 
                 {/* --- Schedule --- */}
                 <section>
-                    <p className={SECTION_TITLE}>Dia, hora e local</p>
+                    <p className={SECTION_TITLE}>Dia, hora, local e neutra</p>
                     <div className="flex gap-2">
                         <input type="date" className={`${INPUT_CLASS} flex-1`} value={date} aria-label="Dia" onChange={(e) => setDate(e.target.value)} />
                         <input type="time" className={`${INPUT_CLASS} w-28`} value={time} aria-label="Hora" disabled={!date} onChange={(e) => setTime(e.target.value)} />
                     </div>
                     <div className="mt-2">
                         <Select value={venueId} options={venueOptions} onChange={setVenueId} placeholder="Local" />
+                    </div>
+                    <div className="mt-2">
+                        <Select value={neutralId} options={neutralOptions} onChange={setNeutralId} placeholder="Neutra" />
                     </div>
                     <button type="button" className={`${PRIMARY_BUTTON} mt-3`} disabled={isSaving} onClick={saveSchedule}>
                         Salvar agendamento
