@@ -5,6 +5,7 @@ import RegisterPage from './pages/RegisterPage'
 import HomePage from './pages/HomePage'
 import BracketsPage from './pages/BracketsPage'
 import SchedulePage from './pages/SchedulePage'
+import AdminPage from './pages/AdminPage'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
         <Route path="/tabela" element={<SchedulePage />} />
+        <Route path="/admin" element={<AdminPage />} />
       </Route>
     </Routes>
   )

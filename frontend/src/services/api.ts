@@ -17,6 +17,7 @@ export function request(url: string, options: RequestInit = {}): Promise<any> {
                 const errorText = await response.text();
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
+            if (response.status === 204) return null;
             return response.json();
         });
 }

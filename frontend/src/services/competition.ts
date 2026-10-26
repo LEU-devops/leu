@@ -1,4 +1,4 @@
-import type { BracketMatch, Modality, ScheduledMatch, Team, Venue } from '../types/competition'
+import type { BracketMatch, Modality, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
 import { request } from './api'
 
 export function getModalities(): Promise<Modality[]> {
@@ -11,6 +11,18 @@ export function getTeams(): Promise<Team[]> {
 
 export function getVenues(): Promise<Venue[]> {
     return request('/venues')
+}
+
+export function getTimeSlots(): Promise<TimeSlot[]> {
+    return request('/time-slots')
+}
+
+export function createTimeSlot(startsAt: string): Promise<TimeSlot> {
+    return request('/time-slots', { method: 'POST', body: JSON.stringify({ startsAt }) })
+}
+
+export function deleteTimeSlot(id: number): Promise<void> {
+    return request(`/time-slots/${id}`, { method: 'DELETE' })
 }
 
 /** Every match of every modality, scheduled ones first. */

@@ -1,12 +1,17 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { getToken } from '../services/auth'
 
-const links = [
+const publicLinks = [
     { to: '/home', label: 'Home' },
     { to: '/chaveamentos', label: 'Chaveamentos' },
     { to: '/tabela', label: 'Tabela' },
 ]
 
+/** Only offered when logged in; the admin routes themselves require the management permission. */
+const adminLinks = [{ to: '/admin', label: 'Admin' }]
+
 export default function AppLayout() {
+    const links = getToken() ? [...publicLinks, ...adminLinks] : publicLinks
     return (
         <div className="relative z-10 flex min-h-screen flex-col">
             <header className="sticky top-0 z-20 border-b border-white/10 bg-black/65 backdrop-blur">
