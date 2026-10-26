@@ -21,6 +21,12 @@ export interface Venue {
     parent_id: number | null;
 }
 
+/** Row shape of the `time_slots` table: a reference start time of the event. */
+export interface TimeSlot {
+    id: number;
+    starts_at: string; // ISO 8601
+}
+
 export const STAGES = ["r16", "qf", "sf", "final"] as const;
 export type Stage = (typeof STAGES)[number];
 
@@ -55,5 +61,6 @@ declare module "knex/types/tables" {
         teams: Team;
         venues: Venue;
         matches: Match;
+        time_slots: TimeSlot;
     }
 }

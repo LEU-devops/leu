@@ -19,6 +19,12 @@ export interface Venue {
     path: string
 }
 
+/** A reference start time of the event, as returned by GET /time-slots. */
+export interface TimeSlot {
+    id: number
+    starts_at: string
+}
+
 export type Stage = 'r16' | 'qf' | 'sf' | 'final'
 export type MatchStatus = 'scheduled' | 'live' | 'finished' | 'walkover'
 
@@ -44,6 +50,11 @@ export interface BracketMatch {
     venue_name: string | null
     neutral_team_id: number | null
     neutral_team_name: string | null
+}
+
+/** A match of any modality as returned by GET /matches. */
+export interface ScheduledMatch extends BracketMatch {
+    modality_name: string
 }
 
 export const MAX_BRACKET_TEAMS = 16

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { getToken } from '../../services/auth'
-import { formatSchedule, stageLabel, type BracketMatch, type Team, type Venue } from '../../types/competition'
+import { formatSchedule, stageLabel, type BracketMatch, type Team, type TimeSlot, type Venue } from '../../types/competition'
 import BracketLayout, { type BracketRound } from './BracketLayout'
 import MatchDialog from './MatchDialog'
 import TeamLogo from './TeamLogo'
@@ -30,14 +30,14 @@ function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePa
     const content = (
         <>
             {/* Teams */}
-            <div className="w-36 shrink-0">
+            <div className="w-32 shrink-0">
                 <TeamRow name={match.team_a_name} score={match.score_a} isWinner={match.winner_id !== null && match.winner_id === match.team_a_id} />
                 <div className="border-t border-white/10" />
                 <TeamRow name={match.team_b_name} score={match.score_b} isWinner={match.winner_id !== null && match.winner_id === match.team_b_id} />
             </div>
 
             {/* When, where and who runs the table */}
-            <div className="flex w-28 min-w-0 flex-col justify-center gap-0.5 border-l border-white/10 bg-white/3 px-2 py-1">
+            <div className="flex w-32 min-w-0 flex-col justify-center gap-0.5 border-l border-white/10 bg-white/3 px-2 py-1">
                 {match.status === 'live' ? <InfoLine><span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span></InfoLine> : null}
                 <InfoLine muted={!when}>{when ?? 'Sem data'}</InfoLine>
                 <InfoLine muted={!venuePath} title={venuePath ?? undefined}>{venuePath ?? 'Sem local'}</InfoLine>
@@ -63,12 +63,13 @@ function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePa
 interface Props {
     matches: BracketMatch[]
     venues: Venue[]
+    timeSlots: TimeSlot[]
     teams: Team[]
     /** Called with the updated bracket after a match is edited. */
     onChange?: (matches: BracketMatch[]) => void
 }
 
-export default function BracketView({ matches, venues, teams, onChange }: Props) {
+export default function BracketView({ matches, venues, timeSlots, teams, onChange }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null)
     const canEdit = Boolean(getToken()) && onChange !== undefined
     const venuePathById = new Map(venues.map((v) => [v.id, v.path]))
@@ -104,6 +105,7 @@ export default function BracketView({ matches, venues, teams, onChange }: Props)
                     nextMatch={matches.find((m) => m.id === editing.next_match_id) ?? null}
                     stage={stageLabel(totalRounds - editing.round)}
                     venues={venues}
+                    timeSlots={timeSlots}
                     allTeams={teams}
                     onClose={() => setEditingId(null)}
                     onChange={onChange}

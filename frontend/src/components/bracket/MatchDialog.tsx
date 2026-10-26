@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { clearMatchResult, setMatchResult, setMatchSchedule } from '../../services/competition'
-import type { BracketMatch, Team, Venue } from '../../types/competition'
+import type { BracketMatch, Team, TimeSlot, Venue } from '../../types/competition'
 import Select from '../Select'
 import TeamLogo from './TeamLogo'
 
@@ -38,6 +38,21 @@ function splitLocal(iso: string | null): { date: string; time: string } {
     }
 }
 
+const dayFormat = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
+
+/** Base slots grouped by local day: "YYYY-MM-DD" → sorted "HH:MM" list, in the order the days come. */
+function slotsByDay(slots: TimeSlot[]): Map<string, { label: string; times: string[] }> {
+    const days = new Map<string, { label: string; times: string[] }>()
+    for (const slot of [...slots].sort((a, b) => a.starts_at.localeCompare(b.starts_at))) {
+        const at = new Date(slot.starts_at)
+        const { date, time } = splitLocal(slot.starts_at)
+        const day = days.get(date) ?? { label: dayFormat.format(at), times: [] }
+        if (!day.times.includes(time)) day.times.push(time)
+        days.set(date, day)
+    }
+    return days
+}
+
 const INPUT_CLASS =
     'rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-red-600 disabled:opacity-50 [color-scheme:dark]'
 const PRIMARY_BUTTON =
@@ -50,13 +65,15 @@ interface Props {
     nextMatch: BracketMatch | null
     stage: string
     venues: Venue[]
+    /** Base start times of the event, offered as a day/time list before the free picker. */
+    timeSlots: TimeSlot[]
     /** Every registered team, to pick the neutral representative from. */
     allTeams: Team[]
     onClose: () => void
     onChange: (matches: BracketMatch[]) => void
 }
 
-export default function MatchDialog({ match, nextMatch, stage, venues, allTeams, onClose, onChange }: Props) {
+export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots, allTeams, onClose, onChange }: Props) {
     const hasTeams = match.team_a_id !== null && match.team_b_id !== null
     const isFinished = match.winner_id !== null
     const isLocked = nextMatch !== null && nextMatch.winner_id !== null
@@ -65,6 +82,10 @@ export default function MatchDialog({ match, nextMatch, stage, venues, allTeams,
     const initial = splitLocal(match.scheduled_at)
     const [date, setDate] = useState(initial.date)
     const [time, setTime] = useState(initial.time)
+    const baseDays = slotsByDay(timeSlots)
+    const isBaseTime = (d: string, t: string) => Boolean(baseDays.get(d)?.times.includes(t))
+    // Free picker is the fallback: when there are no base slots, or the match sits on a time outside them.
+    const [isFreeTime, setIsFreeTime] = useState(baseDays.size === 0 || (initial.date !== '' && !isBaseTime(initial.date, initial.time)))
     const [venueId, setVenueId] = useState<string>(match.venue_id === null ? 'none' : String(match.venue_id))
     const [neutralId, setNeutralId] = useState<string>(match.neutral_team_id === null ? 'none' : String(match.neutral_team_id))
 
@@ -112,6 +133,21 @@ export default function MatchDialog({ match, nextMatch, stage, venues, allTeams,
         }
     }
 
+    function pickBaseDay(value: string) {
+        const nextDate = value === 'none' ? '' : value
+        setDate(nextDate)
+        if (!isBaseTime(nextDate, time)) setTime('')
+    }
+
+    function switchToBaseTimes() {
+        // Keep the current value only when it is one of the base slots.
+        if (!baseDays.has(date)) setDate('')
+        if (!isBaseTime(date, time)) setTime('')
+        setIsFreeTime(false)
+    }
+
+    const canSave = isFreeTime || !date || time !== ''
+
     function saveSchedule() {
         const scheduledAt = date ? new Date(`${date}T${time || '00:00'}`).toISOString() : null
         return run(() =>
@@ -123,6 +159,8 @@ export default function MatchDialog({ match, nextMatch, stage, venues, allTeams,
         )
     }
 
+    const dayOptions = [{ value: 'none', label: 'Sem data' }, ...[...baseDays].map(([value, day]) => ({ value, label: day.label }))]
+    const timeOptions = (baseDays.get(date)?.times ?? []).map((value) => ({ value, label: value }))
     const venueOptions = [{ value: 'none', label: 'Sem local' }, ...venues.map((v) => ({ value: String(v.id), label: v.path }))]
     // The neutral team is another team: the ones playing this match are not offered.
     const neutralOptions = [
@@ -155,17 +193,37 @@ export default function MatchDialog({ match, nextMatch, stage, venues, allTeams,
                 {/* --- Schedule --- */}
                 <section>
                     <p className={SECTION_TITLE}>Dia, hora, local e neutra</p>
-                    <div className="flex gap-2">
-                        <input type="date" className={`${INPUT_CLASS} flex-1`} value={date} aria-label="Dia" onChange={(e) => setDate(e.target.value)} />
-                        <input type="time" className={`${INPUT_CLASS} w-28`} value={time} aria-label="Hora" disabled={!date} onChange={(e) => setTime(e.target.value)} />
-                    </div>
+                    {isFreeTime ? (
+                        <div className="flex gap-2">
+                            <input type="date" className={`${INPUT_CLASS} flex-1`} value={date} aria-label="Dia" onChange={(e) => setDate(e.target.value)} />
+                            <input type="time" className={`${INPUT_CLASS} w-28`} value={time} aria-label="Hora" disabled={!date} onChange={(e) => setTime(e.target.value)} />
+                        </div>
+                    ) : (
+                        <div className="flex gap-2">
+                            <div className="min-w-0 flex-1">
+                                <Select value={date || 'none'} options={dayOptions} onChange={pickBaseDay} placeholder="Dia" />
+                            </div>
+                            <div className="w-28 shrink-0">
+                                <Select value={time} options={timeOptions} onChange={setTime} placeholder="Hora" />
+                            </div>
+                        </div>
+                    )}
+                    {baseDays.size > 0 ? (
+                        <button
+                            type="button"
+                            className="mt-1.5 text-xs font-medium text-red-300 transition hover:text-red-200"
+                            onClick={() => (isFreeTime ? switchToBaseTimes() : setIsFreeTime(true))}
+                        >
+                            {isFreeTime ? 'Usar horários base' : 'Outro horário'}
+                        </button>
+                    ) : null}
                     <div className="mt-2">
                         <Select value={venueId} options={venueOptions} onChange={setVenueId} placeholder="Local" />
                     </div>
                     <div className="mt-2">
                         <Select value={neutralId} options={neutralOptions} onChange={setNeutralId} placeholder="Neutra" />
                     </div>
-                    <button type="button" className={`${PRIMARY_BUTTON} mt-3`} disabled={isSaving} onClick={saveSchedule}>
+                    <button type="button" className={`${PRIMARY_BUTTON} mt-3`} disabled={isSaving || !canSave} onClick={saveSchedule}>
                         Salvar agendamento
                     </button>
                 </section>

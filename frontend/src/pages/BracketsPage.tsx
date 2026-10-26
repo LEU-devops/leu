@@ -3,26 +3,28 @@ import { NavLink, useParams } from 'react-router-dom'
 import BracketBuilder from '../components/bracket/BracketBuilder'
 import BracketView from '../components/bracket/BracketView'
 import Loading from '../components/Loading'
-import { getBracket, getModalities, getTeams, getVenues } from '../services/competition'
-import type { BracketMatch, Modality, Team, Venue } from '../types/competition'
+import { getBracket, getModalities, getTeams, getTimeSlots, getVenues } from '../services/competition'
+import type { BracketMatch, Modality, Team, TimeSlot, Venue } from '../types/competition'
 
 /** Mounted with `key={modality.code}`, so every state below starts fresh when the modality changes. */
 function ModalityContent({ modality }: { modality: Modality }) {
     const [matches, setMatches] = useState<BracketMatch[] | null>(null)
     const [teams, setTeams] = useState<Team[]>([])
     const [venues, setVenues] = useState<Venue[]>([])
+    const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([])
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (modality.type !== 'chaveamento') return
         let cancelled = false
 
-        Promise.all([getBracket(modality.code), getTeams(), getVenues()])
-            .then(([bracket, allTeams, allVenues]) => {
+        Promise.all([getBracket(modality.code), getTeams(), getVenues(), getTimeSlots()])
+            .then(([bracket, allTeams, allVenues, allSlots]) => {
                 if (cancelled) return
                 setMatches(bracket)
                 setTeams(allTeams)
                 setVenues(allVenues)
+                setTimeSlots(allSlots)
             })
             .catch(() => {
                 if (!cancelled) setError('Não foi possível carregar o chaveamento.')
@@ -42,7 +44,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
     if (matches.length === 0)
         return <BracketBuilder key={modality.code} code={modality.code} teams={teams} onCreated={setMatches} />
 
-    return <BracketView matches={matches} venues={venues} teams={teams} onChange={setMatches} />
+    return <BracketView matches={matches} venues={venues} timeSlots={timeSlots} teams={teams} onChange={setMatches} />
 }
 
 export default function BracketsPage() {
@@ -59,10 +61,9 @@ export default function BracketsPage() {
     const selected = modalities?.find((m) => m.code === code?.toUpperCase()) ?? null
 
     return (
-        <div className="relative z-10 flex min-h-screen flex-col md:flex-row">
+        <div className="flex flex-1 flex-col md:flex-row">
             <aside className="shrink-0 border-b border-white/10 bg-black/65 backdrop-blur md:w-64 md:border-r md:border-b-0">
                 <div className="px-5 pt-5 pb-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.35em] text-red-400">Leu</p>
                     <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Chaveamentos</h1>
                 </div>
 
