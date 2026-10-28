@@ -14,5 +14,8 @@
     "src/**/*.d.ts",
     "knexfile.ts",
     "data/migrations/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
   ]
 }
