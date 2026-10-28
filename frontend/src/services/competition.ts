@@ -46,6 +46,8 @@ export interface MatchResultInput {
     scoreA: string
     scoreB: string
     winner: 'a' | 'b'
+    /** True when the winner won by W.O. (the match was not played). */
+    walkover: boolean
 }
 
 /** Sets or replaces a match result. Responds with the whole bracket. */
@@ -64,10 +66,11 @@ export function clearMatchResult(code: string, matchId: number): Promise<Bracket
 export interface MatchScheduleInput {
     scheduledAt: string | null
     venueId: number | null
-    neutralTeamId: number | null
+    redatorTeamId: number | null
+    mesarioTeamId: number | null
 }
 
-/** Sets when and where a match happens and its neutral team. Responds with the whole bracket. */
+/** Sets when and where a match happens and its neutral teams (redator, mesário). Responds with the whole bracket. */
 export function setMatchSchedule(code: string, matchId: number, schedule: MatchScheduleInput): Promise<BracketMatch[]> {
     return request(`/modalities/${code}/matches/${matchId}/schedule`, {
         method: 'PUT',

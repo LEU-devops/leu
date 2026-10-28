@@ -67,7 +67,7 @@ interface Props {
     venues: Venue[]
     /** Base start times of the event, offered as a day/time list before the free picker. */
     timeSlots: TimeSlot[]
-    /** Every registered team, to pick the neutral representative from. */
+    /** Every registered team, to pick the neutral teams (redator, mesário) from. */
     allTeams: Team[]
     onClose: () => void
     onChange: (matches: BracketMatch[]) => void
@@ -87,12 +87,15 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
     // Free picker is the fallback: when there are no base slots, or the match sits on a time outside them.
     const [isFreeTime, setIsFreeTime] = useState(baseDays.size === 0 || (initial.date !== '' && !isBaseTime(initial.date, initial.time)))
     const [venueId, setVenueId] = useState<string>(match.venue_id === null ? 'none' : String(match.venue_id))
-    const [neutralId, setNeutralId] = useState<string>(match.neutral_team_id === null ? 'none' : String(match.neutral_team_id))
+    const [redatorId, setRedatorId] = useState<string>(match.redator_team_id === null ? 'none' : String(match.redator_team_id))
+    const [mesarioId, setMesarioId] = useState<string>(match.mesario_team_id === null ? 'none' : String(match.mesario_team_id))
 
     // Result. String() guards against databases migrated while scores were still integer columns.
     const [scoreA, setScoreA] = useState(String(match.score_a ?? ''))
     const [scoreB, setScoreB] = useState(String(match.score_b ?? ''))
     const [winner, setWinner] = useState<Side | null>(isFinished ? (match.winner_id === match.team_a_id ? 'a' : 'b') : null)
+    // W.O.: the winner is picked by hand and the scores are optional.
+    const [isWalkover, setIsWalkover] = useState(match.walkover)
     // Once the user picks a winner by hand, the scores stop driving the toggle.
     const [isOverridden, setIsOverridden] = useState(isFinished)
 
@@ -154,7 +157,8 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
             setMatchSchedule(match.modality_code, match.id, {
                 scheduledAt,
                 venueId: venueId === 'none' ? null : Number(venueId),
-                neutralTeamId: neutralId === 'none' ? null : Number(neutralId),
+                redatorTeamId: redatorId === 'none' ? null : Number(redatorId),
+                mesarioTeamId: mesarioId === 'none' ? null : Number(mesarioId),
             }),
         )
     }
@@ -162,9 +166,9 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
     const dayOptions = [{ value: 'none', label: 'Sem data' }, ...[...baseDays].map(([value, day]) => ({ value, label: day.label }))]
     const timeOptions = (baseDays.get(date)?.times ?? []).map((value) => ({ value, label: value }))
     const venueOptions = [{ value: 'none', label: 'Sem local' }, ...venues.map((v) => ({ value: String(v.id), label: v.path }))]
-    // The neutral team is another team: the ones playing this match are not offered.
-    const neutralOptions = [
-        { value: 'none', label: 'Sem neutra' },
+    // The neutral teams are other teams: the ones playing this match are not offered.
+    const neutralOptions = (emptyLabel: string) => [
+        { value: 'none', label: emptyLabel },
         ...allTeams
             .filter((t) => t.id !== match.team_a_id && t.id !== match.team_b_id)
             .map((t) => ({ value: String(t.id), label: t.name, icon: <TeamLogo name={t.name} /> })),
@@ -192,7 +196,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
 
                 {/* --- Schedule --- */}
                 <section>
-                    <p className={SECTION_TITLE}>Dia, hora, local e neutra</p>
+                    <p className={SECTION_TITLE}>Dia, hora, local e neutras</p>
                     {isFreeTime ? (
                         <div className="flex gap-2">
                             <input type="date" className={`${INPUT_CLASS} flex-1`} value={date} aria-label="Dia" onChange={(e) => setDate(e.target.value)} />
@@ -220,8 +224,13 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                     <div className="mt-2">
                         <Select value={venueId} options={venueOptions} onChange={setVenueId} placeholder="Local" />
                     </div>
-                    <div className="mt-2">
-                        <Select value={neutralId} options={neutralOptions} onChange={setNeutralId} placeholder="Neutra" />
+                    <div className="mt-2 flex gap-2">
+                        <div className="min-w-0 flex-1">
+                            <Select value={redatorId} options={neutralOptions('Sem redator')} onChange={setRedatorId} placeholder="Redator" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <Select value={mesarioId} options={neutralOptions('Sem mesário')} onChange={setMesarioId} placeholder="Mesário" />
+                        </div>
                     </div>
                     <button type="button" className={`${PRIMARY_BUTTON} mt-3`} disabled={isSaving || !canSave} onClick={saveSchedule}>
                         Salvar agendamento
@@ -232,6 +241,16 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                 {hasTeams ? (
                     <section className="mt-6 border-t border-white/10 pt-5">
                         <p className={SECTION_TITLE}>{isFinished ? 'Alterar resultado' : 'Resultado'}</p>
+                        <label className="mb-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-200">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-red-600"
+                                checked={isWalkover}
+                                disabled={isLocked}
+                                onChange={(event) => setIsWalkover(event.target.checked)}
+                            />
+                            Decidida por W.O.
+                        </label>
                         <div className="space-y-2">
                             {teams.map(({ side, name }) => {
                                 const score = side === 'a' ? scoreA : scoreB
@@ -243,7 +262,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                                         <input
                                             className={`${INPUT_CLASS} w-24 text-center`}
                                             value={score}
-                                            placeholder="0"
+                                            placeholder={isWalkover ? '—' : '0'}
                                             disabled={isLocked}
                                             aria-label={`Placar de ${name}`}
                                             onChange={(event) => changeScore(side, event.target.value)}
@@ -273,7 +292,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                             ))}
                         </div>
                         {!isOverridden && winner === null ? (
-                            <p className="mt-2 text-xs text-zinc-500">Preencha os placares ou escolha o vencedor.</p>
+                            <p className="mt-2 text-xs text-zinc-500">{isWalkover ? 'Escolha quem venceu por W.O.' : 'Preencha os placares ou escolha o vencedor.'}</p>
                         ) : null}
 
                         {isLocked ? (
@@ -287,7 +306,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                                 type="button"
                                 className={PRIMARY_BUTTON}
                                 disabled={isLocked || isSaving || winner === null}
-                                onClick={() => winner && run(() => setMatchResult(match.modality_code, match.id, { scoreA, scoreB, winner }))}
+                                onClick={() => winner && run(() => setMatchResult(match.modality_code, match.id, { scoreA, scoreB, winner, walkover: isWalkover }))}
                             >
                                 Salvar resultado
                             </button>

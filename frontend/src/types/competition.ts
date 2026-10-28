@@ -9,6 +9,10 @@ export interface Modality {
 export interface Team {
     id: number
     name: string
+    /** Supporters ("torcida") bonus earned. Used by the scoring page. */
+    bonus_torcida: boolean
+    /** Points subtracted from the team's total (0 = none). Used by the scoring page. */
+    penalty_points: number
 }
 
 /** A venue with its full path, e.g. "FEF > Complexo de Vôlei > Q1". */
@@ -45,11 +49,17 @@ export interface BracketMatch {
     next_match_id: number | null
     next_slot: 'a' | 'b' | null
     status: MatchStatus
+    /** Decided by W.O.: `winner_id` won without the match being played. */
+    walkover: boolean
     scheduled_at: string | null
     venue_id: number | null
     venue_name: string | null
-    neutral_team_id: number | null
-    neutral_team_name: string | null
+    /** Neutral team writing the match report (súmula). */
+    redator_team_id: number | null
+    redator_team_name: string | null
+    /** Neutral team running the table/scoreboard. */
+    mesario_team_id: number | null
+    mesario_team_name: string | null
 }
 
 /** A match of any modality as returned by GET /matches. */
