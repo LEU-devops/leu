@@ -2,7 +2,7 @@ import type { Knex } from "knex";
 
 export async function up(knex: Knex): Promise<void> {
     await knex.schema.createTable("modalities", (t) => {
-        t.string("code", 2).primary();        // 2 letras, ex.: "FM" (futebol masculino)
+        t.string("code", 3).primary();        // 3 letras, ex.: "FM" (futebol masculino) ou "TMF" (tênis de mesa feminino)
         t.string("name").notNullable();
         t.string("type").notNullable();       // "chaveamento" | "fase_unica"
     });
@@ -15,7 +15,7 @@ export async function up(knex: Knex): Promise<void> {
 
     await knex.schema.createTable("matches", (t) => {
         t.increments("id");
-        t.string("modality_code", 2).notNullable().references("code").inTable("modalities").onDelete("CASCADE");
+        t.string("modality_code", 3).notNullable().references("code").inTable("modalities").onDelete("CASCADE");
         t.string("stage").notNullable();      // "r16", "qf", "sf", "final"
         t.integer("round").notNullable();     // 1 = primeira rodada da chave ... N = final
         t.integer("position").notNullable();  // índice dentro da rodada, de cima para baixo

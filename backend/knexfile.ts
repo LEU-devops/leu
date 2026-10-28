@@ -1,7 +1,6 @@
 import { config as loadEnv } from "dotenv";
 import path from "path";
 import type { Knex } from "knex";
-import Client_Libsql from "./src/services/libsql-dialect";
 
 loadEnv({ quiet: true });
 
@@ -31,22 +30,17 @@ function developmentConfig(): Knex.Config {
 }
 
 function productionConfig(): Knex.Config {
-    const url = process.env.LIBSQL_URL;
-    const authToken = process.env.LIBSQL_AUTH_TOKEN;
-    if (!url)
-        throw new Error("LIBSQL_URL must be set when NODE_ENV=production");
-
-    // The libsql dialect takes the auth token as a query parameter on the URL.
-    const separator = url.includes("?") ? "&" : "?";
-    const filename = authToken ? `${url}${separator}authToken=${encodeURIComponent(authToken)}` : url;
-
+    const connectionString = process.env.SUPABASE_POSTGRES_URL;
+    if (!connectionString)
+        throw new Error("SUPABASE_POSTGRES_URL must be set when NODE_ENV=production");
     return {
-        client: Client_Libsql,
-        connection: { filename },
-        useNullAsDefault: true,
+        client: "pg",
+        connection: { connectionString, ssl: { rejectUnauthorized: false } },
+        pool: { min: 0, max: 2, idleTimeoutMillis: 10_000 },
         migrations,
     };
 }
+
 
 const config: Knex.Config = isProduction ? productionConfig() : developmentConfig();
 
