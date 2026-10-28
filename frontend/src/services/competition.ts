@@ -96,3 +96,17 @@ export function setTeamScoring(teamId: number, scoring: TeamScoringInput): Promi
         body: JSON.stringify(scoring),
     })
 }
+
+export function createVenue(name: string, parentId: number | null): Promise<Venue> {
+    return request('/venues', { method: 'POST', body: JSON.stringify({ name, parentId }) })
+}
+
+/** Renames a venue and/or moves it under another parent (null = root). Fields left out keep their value. */
+export function updateVenue(id: number, changes: { name?: string; parentId?: number | null }): Promise<Venue> {
+    return request(`/venues/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+/** Deletes the venue and every venue nested under it; matches scheduled there lose their venue. */
+export function deleteVenue(id: number): Promise<void> {
+    return request(`/venues/${id}`, { method: 'DELETE' })
+}
