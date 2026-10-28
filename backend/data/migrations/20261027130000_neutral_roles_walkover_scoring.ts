@@ -14,7 +14,7 @@ import type { Knex } from "knex";
  *    wins/losses differently from played matches.
  *
  * 3. Adjustments to a team's overall score, outside of match results:
- *      - fan_bonus: whether the team earned the supporters ("torcida") bonus;
+ *      - bonus_torcida: whether the team earned the supporters ("torcida") bonus;
  *      - penalty_points: points to subtract from the team's total (0 = no penalty).
  *
  * Everything is raw SQL on purpose (same reason as create_venues): knex's alterTable would

@@ -51,23 +51,46 @@ export async function createModality(input: { code?: unknown; name?: unknown; ty
 
 // --- BRACKET ---
 
-/** A match row joined with the names of its teams, neutral team and venue. */
+/** A match row joined with the names of its teams, neutral teams (redator, mesário) and venue. */
 export interface BracketMatch extends Match {
     team_a_name: string | null;
     team_b_name: string | null;
-    neutral_team_name: string | null;
+    redator_team_name: string | null;
+    mesario_team_name: string | null;
     venue_name: string | null;
 }
 
-export async function getBracket(modalityCode: string): Promise<BracketMatch[]> {
-    return db("matches as m")
+/** The joined columns shared by every match listing. */
+export const BRACKET_MATCH_COLUMNS = [
+    "m.*",
+    "ta.name as team_a_name",
+    "tb.name as team_b_name",
+    "tr.name as redator_team_name",
+    "tm.name as mesario_team_name",
+    "v.name as venue_name",
+];
+
+/** Joins `matches as m` with the names needed by a BracketMatch. */
+export function joinBracketMatch(qb: Knex.QueryBuilder) {
+    return qb
         .leftJoin("teams as ta", "ta.id", "m.team_a_id")
         .leftJoin("teams as tb", "tb.id", "m.team_b_id")
-        .leftJoin("teams as tn", "tn.id", "m.neutral_team_id")
-        .leftJoin("venues as v", "v.id", "m.venue_id")
-        .select("m.*", "ta.name as team_a_name", "tb.name as team_b_name", "tn.name as neutral_team_name", "v.name as venue_name")
+        .leftJoin("teams as tr", "tr.id", "m.redator_team_id")
+        .leftJoin("teams as tm", "tm.id", "m.mesario_team_id")
+        .leftJoin("venues as v", "v.id", "m.venue_id");
+}
+
+/** SQLite stores booleans as 0/1; make the API shape the same on every database. */
+export function normalizeMatch<T extends Match>(match: T): T {
+    return { ...match, walkover: Boolean(match.walkover) };
+}
+
+export async function getBracket(modalityCode: string): Promise<BracketMatch[]> {
+    const rows: BracketMatch[] = await joinBracketMatch(db("matches as m"))
+        .select(BRACKET_MATCH_COLUMNS)
         .where("m.modality_code", modalityCode)
         .orderBy([{ column: "m.round" }, { column: "m.position" }]);
+    return rows.map(normalizeMatch);
 }
 
 /**
@@ -120,7 +143,7 @@ async function findOrCreateTeams(trx: Knex.Transaction, names: string[]): Promis
             continue;
         }
         const [{ id }] = await trx("teams").insert({ name }).returning("id");
-        teams.push({ id, name });
+        teams.push({ id, name, bonus_torcida: false, penalty_points: 0 });
     }
     return teams;
 }
@@ -239,17 +262,22 @@ export interface MatchResultInput {
     scoreA?: unknown;
     scoreB?: unknown;
     winner?: unknown;
+    walkover?: unknown;
 }
 
 /**
  * Sets (or replaces) the result of a match and places the winner in the next match.
- * Scores are free text so shootouts and walkovers can be written as the organizers like.
+ * Scores are free text so shootouts can be written as the organizers like; a walkover (WO)
+ * is flagged separately so the scoring rules can tell it apart from a played match.
  */
 export async function setMatchResult(modalityCode: string, matchId: number, input: MatchResultInput): Promise<BracketMatch[]> {
     const scoreA = parseScore(input.scoreA, "scoreA");
     const scoreB = parseScore(input.scoreB, "scoreB");
     if (input.winner !== "a" && input.winner !== "b")
         throw new ValidationError('winner must be "a" or "b"');
+    if (input.walkover !== undefined && typeof input.walkover !== "boolean")
+        throw new ValidationError("walkover must be a boolean");
+    const walkover = input.walkover === true;
 
     await db.transaction(async (trx) => {
         const match = await findMatch(trx, modalityCode, matchId);
@@ -261,7 +289,7 @@ export async function setMatchResult(modalityCode: string, matchId: number, inpu
         const winnerId = input.winner === "a" ? match.team_a_id : match.team_b_id;
         await trx("matches")
             .where({ id: match.id })
-            .update({ score_a: scoreA, score_b: scoreB, winner_id: winnerId, status: "finished" });
+            .update({ score_a: scoreA, score_b: scoreB, winner_id: winnerId, walkover, status: "finished" });
 
         if (match.next_match_id !== null && match.next_slot !== null) {
             const slot = match.next_slot === "a" ? "team_a_id" : "team_b_id";
@@ -283,7 +311,7 @@ export async function clearMatchResult(modalityCode: string, matchId: number): P
 
         await trx("matches")
             .where({ id: match.id })
-            .update({ score_a: null, score_b: null, winner_id: null, status: "scheduled" });
+            .update({ score_a: null, score_b: null, winner_id: null, walkover: false, status: "scheduled" });
 
         if (match.next_match_id !== null && match.next_slot !== null) {
             const slot = match.next_slot === "a" ? "team_a_id" : "team_b_id";
@@ -299,7 +327,8 @@ export async function clearMatchResult(modalityCode: string, matchId: number): P
 export interface MatchScheduleInput {
     scheduledAt?: unknown;
     venueId?: unknown;
-    neutralTeamId?: unknown;
+    redatorTeamId?: unknown;
+    mesarioTeamId?: unknown;
 }
 
 /** Looks up an optional integer id; null/undefined clears the field. */
@@ -314,7 +343,7 @@ async function parseOptionalId(value: unknown, field: string, table: "venues" | 
     return value;
 }
 
-/** Sets when and where a match happens and which team is its neutral representative. Each field can be null to clear it. */
+/** Sets when and where a match happens and which teams are its neutrals (redator, mesário). Each field can be null to clear it. */
 export async function setMatchSchedule(modalityCode: string, matchId: number, input: MatchScheduleInput): Promise<BracketMatch[]> {
     let scheduledAt: string | null = null;
     if (input.scheduledAt !== null && input.scheduledAt !== undefined) {
@@ -325,15 +354,18 @@ export async function setMatchSchedule(modalityCode: string, matchId: number, in
     }
 
     const venueId = await parseOptionalId(input.venueId, "venueId", "venues");
-    const neutralTeamId = await parseOptionalId(input.neutralTeamId, "neutralTeamId", "teams");
+    const redatorTeamId = await parseOptionalId(input.redatorTeamId, "redatorTeamId", "teams");
+    const mesarioTeamId = await parseOptionalId(input.mesarioTeamId, "mesarioTeamId", "teams");
 
     await db.transaction(async (trx) => {
         const match = await findMatch(trx, modalityCode, matchId);
-        if (neutralTeamId !== null && (neutralTeamId === match.team_a_id || neutralTeamId === match.team_b_id))
-            throw new ValidationError("The neutral team cannot be one of the teams playing");
+        for (const [role, teamId] of [["redator", redatorTeamId], ["mesário", mesarioTeamId]] as const) {
+            if (teamId !== null && (teamId === match.team_a_id || teamId === match.team_b_id))
+                throw new ValidationError(`The ${role} team cannot be one of the teams playing`);
+        }
         await trx("matches")
             .where({ id: match.id })
-            .update({ scheduled_at: scheduledAt, venue_id: venueId, neutral_team_id: neutralTeamId });
+            .update({ scheduled_at: scheduledAt, venue_id: venueId, redator_team_id: redatorTeamId, mesario_team_id: mesarioTeamId });
     });
 
     return getBracket(modalityCode);

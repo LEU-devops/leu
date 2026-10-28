@@ -12,6 +12,8 @@ export interface Modality {
 export interface Team {
     id: number;
     name: string;
+    bonus_torcida: boolean;      // supporters ("torcida") bonus earned
+    penalty_points: number;  // points subtracted from the team's total (0 = none)
 }
 
 /** Row shape of the `venues` table. */
@@ -48,8 +50,10 @@ export interface Match {
     next_slot: "a" | "b" | null;
     status: MatchStatus;
     scheduled_at: string | null;   // ISO 8601
+    walkover: boolean;             // decided by WO: winner_id won without the match being played
     venue_id: number | null;
-    neutral_team_id: number | null; // team acting as neutral representative
+    redator_team_id: number | null; // neutral team writing the match report (súmula)
+    mesario_team_id: number | null; // neutral team running the table/scoreboard
 }
 
 /** Maximum number of teams in a bracket (oitavas de final). */
