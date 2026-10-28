@@ -1,5 +1,7 @@
 /** Types of GET /standings: the "Máx e Mín" table. */
 
+import type { ModalityType } from './competition'
+
 /** A closed interval; min === max once the value is settled. */
 export interface Range {
     min: number
@@ -23,7 +25,7 @@ export interface StandingsCell {
 export interface StandingsModality {
     code: string
     name: string
-    type: 'chaveamento' | 'fase_unica'
+    type: ModalityType
     team_count: number
     finished: boolean
     /** Set when the modality could not be scored; its cells are null. */
@@ -55,4 +57,33 @@ export function formatRange(range: Range): string {
 /** "3º" when settled, "3º–4º" while it is still a range. */
 export function formatPosition(range: Range): string {
     return range.min === range.max ? `${range.min}º` : `${range.min}º–${range.max}º`
+}
+
+/** A team's result in one event of an events modality. */
+export interface EventCell {
+    position: number
+    /** Points towards the internal score; 0 for a demonstrativa event. */
+    points: number
+}
+
+/** A team's situation inside an events modality (atletismo, natação). */
+export interface EventsPlacement {
+    team_id: number
+    /** By event id; null when the team has no position in that event (yet). */
+    events: Record<number, EventCell | null>
+    /** Possible internal score (sum of the event points). */
+    score: Range
+    /** Possible final positions in the modality. */
+    position: Range
+    status: PlacementStatus
+    /** Possible points in the overall standings; null when the modality does not score (fewer than 3 teams). */
+    points: Range | null
+}
+
+export interface EventsStandings {
+    team_count: number
+    /** Every event is finished (and there is at least one). */
+    finished: boolean
+    /** Best internal score first. */
+    placements: EventsPlacement[]
 }

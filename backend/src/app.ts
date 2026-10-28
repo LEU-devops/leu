@@ -5,6 +5,7 @@ import { version } from '../package.json'
 
 import authRoutes from './modules/auth/routes'
 import modalitiesRoutes from './modules/modalities/routes'
+import eventsRoutes from './modules/events/routes'
 import matchesRoutes from './modules/matches/routes'
 import teamsRoutes from './modules/teams/routes'
 import venuesRoutes from './modules/venues/routes'
@@ -42,6 +43,7 @@ app.get("/", (_, res) => {
 
 app.use('/auth', authRoutes)
 app.use('/modalities', modalitiesRoutes)
+app.use('/modalities', eventsRoutes) // atletismo, natação: registrations and internal events
 app.use('/matches', matchesRoutes)
 app.use('/teams', teamsRoutes)
 app.use('/venues', venuesRoutes)

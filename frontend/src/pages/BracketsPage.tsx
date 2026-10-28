@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
+import { Link, NavLink, useParams } from 'react-router-dom'
 import BracketBuilder from '../components/bracket/BracketBuilder'
 import BracketView from '../components/bracket/BracketView'
 import Loading from '../components/Loading'
 import { getBracket, getModalities, getTeams, getTimeSlots, getVenues } from '../services/competition'
-import type { BracketMatch, Modality, Team, TimeSlot, Venue } from '../types/competition'
+import { isEventsModality, type BracketMatch, type Modality, type Team, type TimeSlot, type Venue } from '../types/competition'
 
 /** Mounted with `key={modality.code}`, so every state below starts fresh when the modality changes. */
 function ModalityContent({ modality }: { modality: Modality }) {
@@ -35,6 +35,16 @@ function ModalityContent({ modality }: { modality: Modality }) {
         }
     }, [modality.code, modality.type])
 
+    if (isEventsModality(modality.type))
+        return (
+            <p className="text-sm text-zinc-400">
+                Esta modalidade é decidida por provas, não por chaveamento.{' '}
+                <Link to={`/${modality.type}/${modality.code}`} className="font-semibold text-red-400 hover:text-red-300">
+                    Ver as provas
+                </Link>
+                .
+            </p>
+        )
     if (modality.type !== 'chaveamento')
         return <p className="text-sm text-zinc-400">Esta modalidade é disputada em fase única e não possui chaveamento.</p>
 

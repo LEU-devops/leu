@@ -1,5 +1,5 @@
-import type { BracketMatch, Modality, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
-import type { Standings } from '../types/standings'
+import type { BracketMatch, EventKind, Modality, ModalityEvent, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { EventsStandings, Standings } from '../types/standings'
 import { request } from './api'
 
 export function getModalities(): Promise<Modality[]> {
@@ -109,4 +109,45 @@ export function updateVenue(id: number, changes: { name?: string; parentId?: num
 /** Deletes the venue and every venue nested under it; matches scheduled there lose their venue. */
 export function deleteVenue(id: number): Promise<void> {
     return request(`/venues/${id}`, { method: 'DELETE' })
+}
+
+// --- EVENTS MODALITIES (atletismo, natação) ---
+
+/** Everything the events page of a modality shows. Every mutation below responds with a fresh one. */
+export interface EventsView {
+    modality: Modality
+    /** Registered teams, by name. */
+    teams: Team[]
+    events: ModalityEvent[]
+    /** null when the modality cannot be scored; see `error`. */
+    standings: EventsStandings | null
+    error: string | null
+}
+
+export function getEventsView(code: string): Promise<EventsView> {
+    return request(`/modalities/${code}/events`)
+}
+
+/** Replaces the registered teams. A team already placed in an event cannot be removed. */
+export function setRegistrations(code: string, teamIds: number[]): Promise<EventsView> {
+    return request(`/modalities/${code}/registrations`, { method: 'PUT', body: JSON.stringify({ teamIds }) })
+}
+
+export function createEvent(code: string, name: string, kind: EventKind): Promise<EventsView> {
+    return request(`/modalities/${code}/events`, { method: 'POST', body: JSON.stringify({ name, kind }) })
+}
+
+/** Fields left out keep their value. */
+export function updateEvent(code: string, eventId: number, changes: { name?: string; kind?: EventKind; finished?: boolean }): Promise<EventsView> {
+    return request(`/modalities/${code}/events/${eventId}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+/** Deletes the event and its results. */
+export function deleteEvent(code: string, eventId: number): Promise<EventsView> {
+    return request(`/modalities/${code}/events/${eventId}`, { method: 'DELETE' })
+}
+
+/** `positions[0]` is the first place; null leaves the position empty. Replaces every result of the event. */
+export function setEventResults(code: string, eventId: number, positions: (number | null)[]): Promise<EventsView> {
+    return request(`/modalities/${code}/events/${eventId}/results`, { method: 'PUT', body: JSON.stringify({ positions }) })
 }

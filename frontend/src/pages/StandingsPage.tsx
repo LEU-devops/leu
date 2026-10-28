@@ -62,7 +62,7 @@ export default function StandingsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Pontuação</p>
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Máx e Mín</h1>
                 <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-                    Pontos de cada time por modalidade. Enquanto a chave não termina, a célula mostra a faixa de pontos possível e a faixa de colocação.
+                    Pontos de cada time por modalidade. Enquanto a chave ou as provas não terminam, a célula mostra a faixa de pontos possível e a faixa de colocação.
                     {canEdit ? ' O bônus de torcida e a penalidade podem ser alterados direto na tabela.' : ''}
                 </p>
             </div>

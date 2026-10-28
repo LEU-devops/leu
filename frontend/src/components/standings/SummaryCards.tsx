@@ -59,7 +59,7 @@ export default function SummaryCards({ standings, matches }: Props) {
                 total={standings.modalities.length}
                 detail={[
                     inProgress > 0 ? `${inProgress} em andamento` : null,
-                    withoutBracket > 0 ? `${withoutBracket} sem chave` : null,
+                    withoutBracket > 0 ? `${withoutBracket} ${withoutBracket === 1 ? 'não iniciada' : 'não iniciadas'}` : null,
                 ].filter(Boolean).join(' · ') || 'Todas as modalidades encerradas.'}
             />
             <Card

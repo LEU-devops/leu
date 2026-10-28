@@ -1,4 +1,39 @@
-export type ModalityType = 'chaveamento' | 'fase_unica'
+export type ModalityType = 'chaveamento' | 'fase_unica' | EventsModalityType
+
+/**
+ * Modalities decided by a set of internal events ("provas") instead of a bracket: athletics and
+ * swimming. Each has its own page, listing the modalities of that type (masculino, feminino, absoluto).
+ */
+export type EventsModalityType = 'atletismo' | 'natacao'
+
+export const EVENTS_MODALITY_TYPES: EventsModalityType[] = ['atletismo', 'natacao']
+
+export function isEventsModality(type: ModalityType): type is EventsModalityType {
+    return (EVENTS_MODALITY_TYPES as ModalityType[]).includes(type)
+}
+
+/** How an event scores: normal (PONTUACAO.md table), demonstrativa (no points) or revezamento (double). */
+export type EventKind = 'normal' | 'demonstrativa' | 'revezamento'
+
+export const EVENT_KINDS: { value: EventKind; label: string; hint: string }[] = [
+    { value: 'normal', label: 'Normal', hint: 'Pontua pela tabela' },
+    { value: 'demonstrativa', label: 'Demonstrativa', hint: 'Não pontua' },
+    { value: 'revezamento', label: 'Revezamento', hint: 'Pontua em dobro' },
+]
+
+/** An internal event of an events modality, with its results so far (ordered by position). */
+export interface ModalityEvent {
+    id: number
+    modality_code: string
+    name: string
+    kind: EventKind
+    /** Closed by the organizers: no more positions will be filled. */
+    finished: boolean
+    sort_order: number
+    results: { team_id: number; position: number }[]
+    /** Points of each position for this event's kind, index 0 = first place; empty when the modality cannot be scored. */
+    points_by_position: number[]
+}
 
 export interface Modality {
     code: string

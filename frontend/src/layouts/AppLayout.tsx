@@ -5,6 +5,8 @@ const publicLinks = [
     { to: '/home', label: 'Home' },
     { to: '/chaveamentos', label: 'Chaveamentos' },
     { to: '/tabela', label: 'Tabela' },
+    { to: '/atletismo', label: 'Atletismo' },
+    { to: '/natacao', label: 'Natação' },
     { to: '/pontuacao', label: 'Máx e Mín' },
 ]
 

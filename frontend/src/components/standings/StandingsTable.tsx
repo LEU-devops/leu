@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from 'react'
 import TeamLogo from '../bracket/TeamLogo'
+import { isEventsModality } from '../../types/competition'
 import { formatPosition, formatRange, type Range, type Standings, type StandingsCell, type StandingsModality, type StandingsTeam } from '../../types/standings'
 
 const HEADER_CELL = 'px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500'
@@ -17,7 +18,8 @@ function RangeText({ range, settledClass = 'text-zinc-50' }: { range: Range; set
 
 function ModalityHeader({ modality }: { modality: StandingsModality }) {
     const hasBracket = modality.team_count > 0
-    const state = modality.error ? 'Erro ao pontuar' : !hasBracket ? 'Sem chave' : modality.finished ? 'Encerrada' : 'Em andamento'
+    const notStarted = isEventsModality(modality.type) ? 'Sem inscritos' : 'Sem chave'
+    const state = modality.error ? 'Erro ao pontuar' : !hasBracket ? notStarted : modality.finished ? 'Encerrada' : 'Em andamento'
     const title = `${modality.name} · ${state}${hasBracket ? ` · ${modality.team_count} times` : ''}${modality.error ? `\n${modality.error}` : ''}`
     return (
         <th scope="col" className={`${HEADER_CELL} text-center ${hasBracket && !modality.error ? '' : 'text-zinc-700'}`} title={title}>

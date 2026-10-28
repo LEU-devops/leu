@@ -1,5 +1,6 @@
 import { db } from "../../services/db";
-import type { Modality, ModalityType } from "../../types/competition";
+import { isEventsModality, type Modality, type ModalityType } from "../../types/competition";
+import { loadEvents, scoreOrError, type EventWithResults } from "../events/controller";
 import { BONUS_TORCIDA_POINTS, scoreBracket, StandingsError, type BracketInput, type PlacementStatus, type Range } from "./placement";
 
 /** One cell of the standings table: a team's situation in one modality. */
@@ -23,11 +24,17 @@ export interface StandingsModality {
     error: string | null;
 }
 
+type ScoredModality = { column: StandingsModality; cells: Map<number, StandingsCell> };
+
+function emptyColumn(modality: Modality): StandingsModality {
+    return { code: modality.code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
+}
+
 /** One row of the standings table. */
 export interface StandingsTeam {
     id: number;
     name: string;
-    /** By modality code. null = nothing to compute: not registered, bracket not created or modality not scored by bracket. */
+    /** By modality code. null = nothing to compute: not registered, bracket not created or modality not scored. */
     modalities: Record<string, StandingsCell | null>;
     bonus_torcida: { earned: boolean; points: number };
     penalty_points: number;
@@ -40,9 +47,9 @@ export interface Standings {
     teams: StandingsTeam[];
 }
 
-/** Cells of one modality by team id, with the column metadata. */
-function scoreModality(modality: Modality, matches: BracketInput[]): { column: StandingsModality; cells: Map<number, StandingsCell> } {
-    const column: StandingsModality = { code: modality.code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
+/** Cells of a bracket modality by team id, with the column metadata. */
+function scoreBracketModality(modality: Modality, matches: BracketInput[]): ScoredModality {
+    const column = emptyColumn(modality);
     const cells = new Map<number, StandingsCell>();
 
     if (modality.type !== "chaveamento" || matches.length === 0)
@@ -64,19 +71,46 @@ function scoreModality(modality: Modality, matches: BracketInput[]): { column: S
     return { column, cells };
 }
 
+/** Cells of an events modality (atletismo, natação): the final classification by internal score. */
+function scoreEventsModality(modality: Modality, teamIds: number[], events: EventWithResults[]): ScoredModality {
+    const column = emptyColumn(modality);
+    const cells = new Map<number, StandingsCell>();
+    if (teamIds.length === 0)
+        return { column, cells };
+
+    const { standings, error } = scoreOrError(teamIds, events);
+    column.team_count = teamIds.length;
+    if (!standings) {
+        column.error = error;
+        return { column, cells };
+    }
+    column.finished = standings.finished;
+    for (const p of standings.placements)
+        cells.set(p.team_id, { position: p.position, points: p.points, status: p.status, eliminated_by: null, walkover_loss: false });
+    return { column, cells };
+}
+
 /** The whole standings table: every team against every modality, with bonus, penalty and totals. */
 export async function getStandings(): Promise<Standings> {
-    const [modalities, teams, matches] = await Promise.all([
+    const [modalities, teams, matches, registrations] = await Promise.all([
         db("modalities").select("*").orderBy("name"),
         db("teams").select("*").orderBy("name"),
         db("matches").select("id", "modality_code", "round", "team_a_id", "team_b_id", "winner_id", "walkover"),
+        db("registrations").select("*"),
     ]);
+    const eventsByModality = await loadEvents(db, modalities.filter((m) => isEventsModality(m.type)).map((m) => m.code));
 
     const scored = modalities.map((modality) =>
-        scoreModality(
-            modality,
-            matches.filter((m) => m.modality_code === modality.code).map((m) => ({ ...m, walkover: Boolean(m.walkover) })),
-        ),
+        isEventsModality(modality.type)
+            ? scoreEventsModality(
+                  modality,
+                  registrations.filter((r) => r.modality_code === modality.code).map((r) => r.team_id),
+                  eventsByModality.get(modality.code) ?? [],
+              )
+            : scoreBracketModality(
+                  modality,
+                  matches.filter((m) => m.modality_code === modality.code).map((m) => ({ ...m, walkover: Boolean(m.walkover) })),
+              ),
     );
 
     return {
