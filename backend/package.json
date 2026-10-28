@@ -9,15 +9,13 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "migrate:make": "knex migrate:make",
-    "migrate:from-turso": "NODE_ENV=production ts-node scripts/migrate-turso-to-supabase.ts"
+    "migrate:make": "knex migrate:make"
   },
   "keywords": [],
   "author": "Rafael Setton",
   "license": "ISC",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@libsql/client": "^0.18.0",
     "@types/bcrypt": "^6.0.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.19",
