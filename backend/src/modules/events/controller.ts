@@ -1,8 +1,8 @@
 import { Knex } from "knex";
 import { db } from "../../services/db";
-import { Event, EVENT_KINDS, EventKind, isEventsModality, Modality, Team } from "../../types/competition";
+import { Event, EventFlags, isEventsModality, Modality, Team } from "../../types/competition";
 import { StandingsError } from "../standings/placement";
-import { eventPoints, scoreEvents, type EventInput, type EventsStandings } from "./scoring";
+import { athletesPerTeam, eventEntries, scoreEvents, type EventEntry, type EventInput, type EventsStandings } from "./scoring";
 
 export class ValidationError extends Error {
     name = "Validation Error";
@@ -21,10 +21,9 @@ export interface EventWithResults extends Event {
     results: { team_id: number; position: number }[];
 }
 
-/** An event as the page shows it: results plus what each position is worth. */
-export interface EventView extends EventWithResults {
-    /** Points of each position for this event's kind, index 0 = first place; empty when the modality cannot be scored. */
-    points_by_position: number[];
+/** An event as the page shows it: each athlete's result, saying whether it scores and with how many points. */
+export interface EventView extends Event {
+    results: EventEntry[];
 }
 
 /** Everything the events page of a modality needs. Every mutation responds with a fresh one. */
@@ -61,7 +60,7 @@ export async function registeredTeamIds(trx: Knex, code: string): Promise<number
 
 /** SQLite stores booleans as 0/1; make the API shape the same on every database. */
 function normalizeEvent(event: Event): Event {
-    return { ...event, finished: Boolean(event.finished) };
+    return { ...event, demonstrativa: Boolean(event.demonstrativa), revezamento: Boolean(event.revezamento), finished: Boolean(event.finished) };
 }
 
 /** Events of several modalities with their results, grouped by modality code, in display order. */
@@ -93,6 +92,17 @@ export function scoreOrError(teamIds: number[], events: EventInput[]): { standin
     }
 }
 
+/** The page's view of an event; the points of its entries need no table, so they never fail. */
+function toView(event: EventWithResults): EventView {
+    try {
+        return { ...event, results: eventEntries(event) };
+    } catch (error) {
+        if (!(error instanceof StandingsError))
+            throw error;
+        return { ...event, results: eventEntries({ ...event, finished: false }) }; // too many teams: shown without points
+    }
+}
+
 export async function getEventsView(code: string): Promise<EventsView> {
     const modality = await findEventsModality(db, code);
     const [teams, events] = await Promise.all([
@@ -100,14 +110,11 @@ export async function getEventsView(code: string): Promise<EventsView> {
         loadEvents(db, [code]).then((m) => m.get(code)!),
     ]);
     const normalizedTeams: Team[] = teams.map((t) => ({ ...t, bonus_torcida: Boolean(t.bonus_torcida) }));
-    const teamIds = normalizedTeams.map((t) => t.id);
-    const scored = scoreOrError(teamIds, events);
-    const positions = Array.from({ length: teamIds.length }, (_, i) => i + 1);
     return {
         modality,
         teams: normalizedTeams,
-        events: events.map((e) => ({ ...e, points_by_position: scored.standings ? positions.map((p) => eventPoints(teamIds.length, p, e.kind)) : [] })),
-        ...scored,
+        events: events.map(toView),
+        ...scoreOrError(normalizedTeams.map((t) => t.id), events),
     };
 }
 
@@ -157,9 +164,12 @@ export async function setRegistrations(code: string, input: { teamIds?: unknown 
 
 export interface EventInputBody {
     name?: unknown;
-    kind?: unknown;
+    demonstrativa?: unknown;
+    revezamento?: unknown;
     finished?: unknown;
 }
+
+const FLAGS = ["demonstrativa", "revezamento", "finished"] as const;
 
 function parseName(value: unknown): string {
     const name = typeof value === "string" ? value.trim() : "";
@@ -168,10 +178,18 @@ function parseName(value: unknown): string {
     return name;
 }
 
-function parseKind(value: unknown): EventKind {
-    if (!EVENT_KINDS.includes(value as EventKind))
-        throw new ValidationError(`kind must be one of: ${EVENT_KINDS.join(", ")}`);
-    return value as EventKind;
+/** The boolean fields present in the body, validated. */
+function parseFlags(input: EventInputBody): Partial<EventFlags & Pick<Event, "finished">> {
+    const flags: Partial<EventFlags & Pick<Event, "finished">> = {};
+    for (const flag of FLAGS) {
+        const value = input[flag];
+        if (value === undefined)
+            continue;
+        if (typeof value !== "boolean")
+            throw new ValidationError(`${flag} must be a boolean`);
+        flags[flag] = value;
+    }
+    return flags;
 }
 
 async function assertNameFree(trx: Knex, code: string, name: string, exceptId: number | null) {
@@ -180,17 +198,17 @@ async function assertNameFree(trx: Knex, code: string, name: string, exceptId: n
         throw new ConflictError(`Event "${clash.name}" already exists in modality ${code}`);
 }
 
-/** Body: { name, kind }. The event goes to the end of the list. */
+/** Body: { name, demonstrativa?, revezamento? } (both default to false). The event goes to the end of the list. */
 export async function createEvent(code: string, input: EventInputBody): Promise<EventsView> {
     const name = parseName(input.name);
-    const kind = input.kind === undefined ? "normal" : parseKind(input.kind);
+    const { demonstrativa = false, revezamento = false } = parseFlags(input);
 
     await db.transaction(async (trx) => {
         await findEventsModality(trx, code);
         await assertNameFree(trx, code, name, null);
         const last = await trx("events").where({ modality_code: code }).orderBy("sort_order", "desc").first();
         const sort_order = (last?.sort_order ?? -1) + 1;
-        await trx("events").insert({ modality_code: code, name, kind, finished: false, sort_order });
+        await trx("events").insert({ modality_code: code, name, demonstrativa, revezamento, finished: false, sort_order });
     });
 
     return getEventsView(code);
@@ -203,26 +221,37 @@ async function findEvent(trx: Knex, code: string, eventId: number): Promise<Even
     return normalizeEvent(event);
 }
 
-/** Body: { name?, kind?, finished? }. Fields left out keep their value. */
+/** Teams with more athletes in the event than `limit`, by name. */
+async function teamsOverLimit(trx: Knex, eventId: number, limit: number): Promise<string[]> {
+    const rows = await trx("event_results as er")
+        .join("teams as t", "t.id", "er.team_id")
+        .where("er.event_id", eventId)
+        .groupBy("t.id", "t.name")
+        .havingRaw("count(*) > ?", [limit])
+        .orderBy("t.name")
+        .select("t.name");
+    return rows.map((r) => r.name);
+}
+
+/** Body: { name?, demonstrativa?, revezamento?, finished? }. Fields left out keep their value. */
 export async function updateEvent(code: string, eventId: number, input: EventInputBody): Promise<EventsView> {
-    const changes: Partial<Pick<Event, "name" | "kind" | "finished">> = {};
+    const changes: Partial<Pick<Event, "name" | "demonstrativa" | "revezamento" | "finished">> = parseFlags(input);
     if (input.name !== undefined)
         changes.name = parseName(input.name);
-    if (input.kind !== undefined)
-        changes.kind = parseKind(input.kind);
-    if (input.finished !== undefined) {
-        if (typeof input.finished !== "boolean")
-            throw new ValidationError("finished must be a boolean");
-        changes.finished = input.finished;
-    }
     if (Object.keys(changes).length === 0)
-        throw new ValidationError("Provide name, kind and/or finished");
+        throw new ValidationError("Provide name, demonstrativa, revezamento and/or finished");
 
     await db.transaction(async (trx) => {
         await findEventsModality(trx, code);
         const event = await findEvent(trx, code, eventId);
         if (changes.name !== undefined)
             await assertNameFree(trx, code, changes.name, event.id);
+        if (changes.revezamento && !event.revezamento) {
+            // A relay takes one athlete per team: refuse while a team has two placed.
+            const over = await teamsOverLimit(trx, event.id, 1);
+            if (over.length > 0)
+                throw new ConflictError(`${over.join(", ")} already placed two athletes in this event; a relay allows one per team`);
+        }
         await trx("events").where({ id: event.id }).update(changes);
     });
 
@@ -242,8 +271,9 @@ export async function deleteEvent(code: string, eventId: number): Promise<Events
 // --- RESULTS ---
 
 /**
- * Body: { positions: [teamId | null, ...] }, index 0 = first place. Replaces every result of the
- * event: null leaves the position empty. Teams must be registered and appear at most once.
+ * Body: { positions: [teamId | null, ...] }, index 0 = first place over every athlete. Replaces
+ * every result of the event: null leaves the position empty. Teams must be registered and may
+ * appear up to twice (once in a relay): the second athlete scores nothing and takes no place.
  */
 export async function setEventResults(code: string, eventId: number, input: { positions?: unknown }): Promise<EventsView> {
     if (!Array.isArray(input.positions))
@@ -253,20 +283,22 @@ export async function setEventResults(code: string, eventId: number, input: { po
         throw new ValidationError("every position must be an integer team id or null");
 
     const results = positions.flatMap((id, index) => (id === null ? [] : [{ team_id: id as number, position: index + 1 }]));
-    const seen = new Set<number>();
-    for (const r of results) {
-        if (seen.has(r.team_id))
-            throw new ValidationError(`Team ${r.team_id} appears in more than one position`);
-        seen.add(r.team_id);
-    }
 
     await db.transaction(async (trx) => {
         await findEventsModality(trx, code);
         const event = await findEvent(trx, code, eventId);
+        const limit = athletesPerTeam(event);
+
+        const athletes = new Map<number, number>();
+        for (const r of results)
+            athletes.set(r.team_id, (athletes.get(r.team_id) ?? 0) + 1);
+        const over = [...athletes].filter(([, count]) => count > limit).map(([id]) => id);
+        if (over.length > 0)
+            throw new ValidationError(`Team${over.length > 1 ? "s" : ""} ${over.join(", ")} ${over.length > 1 ? "appear" : "appears"} more than ${limit === 1 ? "once (a relay has one athlete per team)" : `${limit} times`}`);
 
         const registered = await registeredTeamIds(trx, code);
-        if (positions.length > registered.length)
-            throw new ValidationError(`positions has ${positions.length} entries, but only ${registered.length} teams are registered`);
+        if (positions.length > registered.length * limit)
+            throw new ValidationError(`positions has ${positions.length} entries, but ${registered.length} registered teams can enter at most ${registered.length * limit}`);
         const unregistered = results.filter((r) => !registered.includes(r.team_id));
         if (unregistered.length > 0)
             throw new ValidationError(`Team${unregistered.length > 1 ? "s" : ""} ${unregistered.map((r) => r.team_id).join(", ")} not registered in modality ${code}`);

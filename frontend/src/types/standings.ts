@@ -61,6 +61,7 @@ export function formatPosition(range: Range): string {
 
 /** A team's result in one event of an events modality. */
 export interface EventCell {
+    /** Place among the teams of the event (1 = first). */
     position: number
     /** Points towards the internal score; 0 for a demonstrativa event. */
     points: number
@@ -69,7 +70,7 @@ export interface EventCell {
 /** A team's situation inside an events modality (atletismo, natação). */
 export interface EventsPlacement {
     team_id: number
-    /** By event id; null when the team has no position in that event (yet). */
+    /** By event id; null while the event is open, or when the team did not take part in it. */
     events: Record<number, EventCell | null>
     /** Possible internal score (sum of the event points). */
     score: Range

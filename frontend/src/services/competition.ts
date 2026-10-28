@@ -1,4 +1,4 @@
-import type { BracketMatch, EventKind, Modality, ModalityEvent, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { BracketMatch, EventFlags, Modality, ModalityEvent, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
 import type { EventsStandings, Standings } from '../types/standings'
 import { request } from './api'
 
@@ -133,12 +133,12 @@ export function setRegistrations(code: string, teamIds: number[]): Promise<Event
     return request(`/modalities/${code}/registrations`, { method: 'PUT', body: JSON.stringify({ teamIds }) })
 }
 
-export function createEvent(code: string, name: string, kind: EventKind): Promise<EventsView> {
-    return request(`/modalities/${code}/events`, { method: 'POST', body: JSON.stringify({ name, kind }) })
+export function createEvent(code: string, name: string, flags: EventFlags): Promise<EventsView> {
+    return request(`/modalities/${code}/events`, { method: 'POST', body: JSON.stringify({ name, ...flags }) })
 }
 
 /** Fields left out keep their value. */
-export function updateEvent(code: string, eventId: number, changes: { name?: string; kind?: EventKind; finished?: boolean }): Promise<EventsView> {
+export function updateEvent(code: string, eventId: number, changes: Partial<EventFlags & { name: string; finished: boolean }>): Promise<EventsView> {
     return request(`/modalities/${code}/events/${eventId}`, { method: 'PUT', body: JSON.stringify(changes) })
 }
 
@@ -147,7 +147,7 @@ export function deleteEvent(code: string, eventId: number): Promise<EventsView> 
     return request(`/modalities/${code}/events/${eventId}`, { method: 'DELETE' })
 }
 
-/** `positions[0]` is the first place; null leaves the position empty. Replaces every result of the event. */
+/** `positions[0]` is the first place over every athlete; null leaves the position empty. A team may appear twice (once in a relay). Replaces every result of the event. */
 export function setEventResults(code: string, eventId: number, positions: (number | null)[]): Promise<EventsView> {
     return request(`/modalities/${code}/events/${eventId}/results`, { method: 'PUT', body: JSON.stringify({ positions }) })
 }

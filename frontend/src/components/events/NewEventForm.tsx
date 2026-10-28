@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { createEvent, type EventsView } from '../../services/competition'
-import { EVENT_KINDS, type EventKind } from '../../types/competition'
+import { EVENT_FLAGS, type EventFlags } from '../../types/competition'
+import EventFlagsFields from './EventFlagsFields'
 import { ERROR_BOX, errorMessage, INPUT_CLASS, PRIMARY_BUTTON } from './shared'
 
 interface Props {
@@ -8,10 +9,10 @@ interface Props {
     onChange: (view: EventsView) => void
 }
 
-/** Adds an event to the modality: a name and how it scores (normal, demonstrativa, revezamento). */
+/** Adds an event to the modality: a name and how it scores (revezamento and/or demonstrativa). */
 export default function NewEventForm({ code, onChange }: Props) {
     const [name, setName] = useState('')
-    const [kind, setKind] = useState<EventKind>('normal')
+    const [flags, setFlags] = useState<EventFlags>({ demonstrativa: false, revezamento: false })
     const [error, setError] = useState<string | null>(null)
     const [isSaving, setIsSaving] = useState(false)
     const nameInput = useRef<HTMLInputElement>(null)
@@ -23,8 +24,8 @@ export default function NewEventForm({ code, onChange }: Props) {
         setError(null)
         setIsSaving(true)
         try {
-            onChange(await createEvent(code, trimmed, kind))
-            setName('') // keep the kind, so several relays can be added in a row
+            onChange(await createEvent(code, trimmed, flags))
+            setName('') // keep the flags, so several relays can be added in a row
             nameInput.current?.focus()
         } catch (saveError) {
             setError(errorMessage(saveError, 'Não foi possível adicionar a prova.'))
@@ -33,7 +34,7 @@ export default function NewEventForm({ code, onChange }: Props) {
         }
     }
 
-    const hint = EVENT_KINDS.find((k) => k.value === kind)?.hint
+    const hint = EVENT_FLAGS.filter((f) => flags[f.key]).map((f) => f.hint.toLowerCase()).join(' · ') || 'Pontua pela tabela, até 2 atletas por time'
 
     return (
         <div className="rounded-2xl border border-white/10 bg-black/65 p-4">
@@ -42,16 +43,7 @@ export default function NewEventForm({ code, onChange }: Props) {
                     Nova prova
                     <input ref={nameInput} className={`${INPUT_CLASS} w-52`} value={name} required placeholder="Ex.: 100m rasos" disabled={isSaving} onChange={(e) => setName(e.target.value)} />
                 </label>
-                <label className="flex flex-col gap-1 text-xs font-medium text-zinc-400">
-                    Tipo
-                    <select className={INPUT_CLASS} value={kind} disabled={isSaving} onChange={(e) => setKind(e.target.value as EventKind)}>
-                        {EVENT_KINDS.map((k) => (
-                            <option key={k.value} value={k.value}>
-                                {k.label}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <EventFlagsFields value={flags} disabled={isSaving} onChange={setFlags} />
                 <button type="submit" className={PRIMARY_BUTTON} disabled={isSaving || !name.trim()}>
                     {isSaving ? 'Adicionando...' : 'Adicionar'}
                 </button>

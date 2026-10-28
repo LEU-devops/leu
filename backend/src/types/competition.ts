@@ -74,28 +74,26 @@ export interface Registration {
     team_id: number;
 }
 
-/**
- * How an event scores for its modality:
- *  - normal: the PONTUACAO.md table by position;
- *  - demonstrativa: positions are recorded but nobody scores;
- *  - revezamento: double points.
- */
-export const EVENT_KINDS = ["normal", "demonstrativa", "revezamento"] as const;
-export type EventKind = (typeof EVENT_KINDS)[number];
+/** The flags that say how an event scores; independent, so a relay can also be a demonstration. */
+export interface EventFlags {
+    /** Positions are recorded but nobody scores. */
+    demonstrativa: boolean;
+    /** Double points, and a single athlete (the relay team) per team instead of two. */
+    revezamento: boolean;
+}
 
 /** Row shape of the `events` table: an internal event ("prova") of an events modality, e.g. "100m rasos". */
-export interface Event {
+export interface Event extends EventFlags {
     id: number;
     modality_code: string;
     name: string;
-    kind: EventKind;
-    /** Closed by the organizers: no more positions will be filled, even if some are empty. */
+    /** Closed by the organizers: the results are final and the event scores. */
     finished: boolean;
     /** Display order within the modality. */
     sort_order: number;
 }
 
-/** Row shape of the `event_results` table: the team that finished an event in a position (1 = first). */
+/** Row shape of the `event_results` table: the team of the athlete that finished an event in a position (1 = first). */
 export interface EventResult {
     event_id: number;
     team_id: number;

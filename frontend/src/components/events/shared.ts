@@ -15,5 +15,8 @@ export function errorMessage(error: unknown, fallback: string): string {
     if (message.includes('already placed in an event')) return `${message.split(' already')[0]} já tem resultado em alguma prova. Limpe esses resultados antes de remover a inscrição.`
     if (message.includes('already exists')) return 'Já existe uma prova com esse nome nesta modalidade.'
     if (message.includes('not registered')) return 'Esse time não está inscrito na modalidade.'
+    if (message.includes('appears more than') || message.includes('appear more than')) return 'Um time pode ter no máximo 2 atletas por prova (1 equipe no revezamento).'
+    if (message.includes('already placed two athletes')) return 'Há time com 2 atletas nesta prova. Limpe esses resultados antes de marcá-la como revezamento.'
+    if (message.includes('can enter at most')) return 'Há mais colocações do que atletas possíveis para os times inscritos.'
     return message
 }

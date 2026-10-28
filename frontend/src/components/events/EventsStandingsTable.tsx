@@ -1,4 +1,4 @@
-import type { ModalityEvent, Team } from '../../types/competition'
+import { EVENT_FLAGS, type ModalityEvent, type Team } from '../../types/competition'
 import { formatPosition, formatRange, type EventsPlacement, type EventsStandings, type Range } from '../../types/standings'
 import TeamLogo from '../bracket/TeamLogo'
 
@@ -11,15 +11,23 @@ function RangeText({ range, settledClass = 'text-zinc-50' }: { range: Range; set
 }
 
 function EventHeader({ event }: { event: ModalityEvent }) {
-    const kind = event.kind === 'revezamento' ? ' · pontua em dobro' : event.kind === 'demonstrativa' ? ' · não pontua' : ''
+    const hints = EVENT_FLAGS.filter((f) => event[f.key]).map((f) => f.hint.toLowerCase())
+    const tags = [
+        event.revezamento ? <span key="relay" className="text-amber-300">×2</span> : null,
+        event.demonstrativa ? 'demo' : null,
+        event.finished ? 'fim' : 'aberta',
+    ].filter((t) => t !== null)
     return (
-        <th scope="col" className={`${HEADER_CELL} text-center ${event.kind === 'demonstrativa' ? 'text-zinc-700' : ''}`} title={`${event.name}${kind} · ${event.finished ? 'Encerrada' : 'Em andamento'}`}>
+        <th scope="col" className={`${HEADER_CELL} text-center ${event.demonstrativa ? 'text-zinc-700' : ''}`} title={[event.name, ...hints, event.finished ? 'Encerrada' : 'Em andamento'].join(' · ')}>
             <span className="flex flex-col items-center gap-0.5">
                 <span className="block max-w-32 truncate tracking-[0.1em]">{event.name}</span>
                 <span className="text-[9px] font-normal tracking-normal normal-case">
-                    {event.kind === 'revezamento' ? <span className="text-amber-300">×2</span> : event.kind === 'demonstrativa' ? 'demo' : null}
-                    {event.kind !== 'normal' ? ' · ' : ''}
-                    {event.finished ? 'fim' : 'aberta'}
+                    {tags.map((tag, index) => (
+                        <span key={index}>
+                            {index > 0 ? ' · ' : ''}
+                            {tag}
+                        </span>
+                    ))}
                 </span>
             </span>
         </th>
@@ -27,9 +35,20 @@ function EventHeader({ event }: { event: ModalityEvent }) {
 }
 
 function EventPointsCell({ placement, event }: { placement: EventsPlacement; event: ModalityEvent }) {
+    if (!event.finished)
+        return (
+            <td className="px-2 py-2 text-center text-zinc-600" title="Prova em andamento: pontua ao ser encerrada">
+                …
+            </td>
+        )
     const cell = placement.events[event.id] ?? null
-    if (!cell) return <td className="px-2 py-2 text-center text-zinc-700">–</td>
-    const scores = event.kind !== 'demonstrativa'
+    if (!cell)
+        return (
+            <td className="px-2 py-2 text-center text-zinc-700" title="Não participou">
+                –
+            </td>
+        )
+    const scores = !event.demonstrativa
     return (
         <td className="px-2 py-1.5 text-center align-middle" title={`${cell.position}º lugar${scores ? ` · ${cell.points} pontos` : ' · demonstrativa, não pontua'}`}>
             <span className="flex flex-col items-center leading-tight">
@@ -48,7 +67,7 @@ interface Props {
 
 /**
  * The "Máx e Mín" of one events modality: a row per registered team with its points in every
- * event, the internal score, the final position and the points it takes to the overall standings.
+ * finished event, the internal score, the final position and the points it takes to the overall standings.
  */
 export default function EventsStandingsTable({ teams, events, standings }: Props) {
     const teamById = new Map(teams.map((t) => [t.id, t]))
@@ -63,7 +82,7 @@ export default function EventsStandingsTable({ teams, events, standings }: Props
                         {events.map((event) => (
                             <EventHeader key={event.id} event={event} />
                         ))}
-                        <th scope="col" className={`${HEADER_CELL} border-l border-white/10 text-right`} title="Soma dos pontos das provas (faixa enquanto houver provas abertas)">Pontos</th>
+                        <th scope="col" className={`${HEADER_CELL} border-l border-white/10 text-right`} title="Soma dos pontos das provas encerradas (faixa enquanto houver provas abertas)">Pontos</th>
                         <th scope="col" className={`${HEADER_CELL} text-right`} title="Colocação final na modalidade">Coloc.</th>
                         <th scope="col" className={`${HEADER_CELL} text-right text-red-400`} title="Pontos levados para a tabela geral">Geral</th>
                     </tr>

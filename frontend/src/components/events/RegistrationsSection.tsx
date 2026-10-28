@@ -16,7 +16,7 @@ interface Props {
 
 /**
  * Who takes part in the modality. Registration is per modality, not per event: the registered
- * teams are the options of every event, and their number picks the points table.
+ * teams are the options of every event, and their number picks the points table of the overall standings.
  */
 export default function RegistrationsSection({ code, registered, allTeams, canEdit, onChange }: Props) {
     const [error, setError] = useState<string | null>(null)
@@ -44,8 +44,8 @@ export default function RegistrationsSection({ code, registered, allTeams, canEd
                 <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Inscrições</h3>
                 <p className="text-sm text-zinc-400">
                     {canEdit
-                        ? 'Clique em um time para inscrever ou retirar. O número de inscritos define a tabela de pontos das provas.'
-                        : 'Times inscritos na modalidade. O número de inscritos define a tabela de pontos das provas.'}
+                        ? 'Clique em um time para inscrever ou retirar. Os inscritos são as opções de cada prova; o número de inscritos define a tabela de pontos da colocação final na geral.'
+                        : 'Times inscritos na modalidade. O número de inscritos define a tabela de pontos da colocação final na geral.'}
                 </p>
             </div>
 

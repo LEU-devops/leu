@@ -57,7 +57,7 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
                 <div>
                     <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Classificação</h3>
                     <p className="text-sm text-zinc-400">
-                        Soma dos pontos de cada prova. A colocação final aqui é o que pontua na tabela geral; enquanto houver provas abertas, a tabela mostra as faixas possíveis.
+                        Soma dos pontos das provas encerradas. A colocação final aqui é o que pontua na tabela geral; enquanto houver provas abertas, todos os times ficam com faixas em aberto.
                     </p>
                 </div>
                 {view.error ? <p className="rounded-2xl border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">{view.error}</p> : null}
@@ -72,7 +72,8 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
                 <div>
                     <h3 className="text-lg font-semibold tracking-tight text-zinc-50">Provas</h3>
                     <p className="text-sm text-zinc-400">
-                        Uma tabela por prova com o time de cada colocação. Revezamentos pontuam em dobro e demonstrativas não pontuam.
+                        Uma tabela por prova com o time de cada colocação, até 2 atletas por time (1 equipe no revezamento): só o melhor colocado do time pontua e ocupa lugar.
+                        Ao ser encerrada, a prova pontua pela tabela do número de times que participaram dela. Revezamentos pontuam em dobro e demonstrativas não pontuam.
                     </p>
                 </div>
 

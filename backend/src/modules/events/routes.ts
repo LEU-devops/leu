@@ -42,12 +42,12 @@ router.put("/:code/registrations", ...canManage, async (req: Request, res: Respo
     res.json(await setRegistrations(code(req), req.body ?? {}));
 });
 
-/** Body: { "name": "100m rasos", "kind": "normal" | "demonstrativa" | "revezamento" } (kind defaults to normal). */
+/** Body: { "name": "100m rasos", "demonstrativa"?: boolean, "revezamento"?: boolean } (both default to false). */
 router.post("/:code/events", ...canManage, async (req: Request, res: Response) => {
     res.status(201).json(await createEvent(code(req), req.body ?? {}));
 });
 
-/** Body: { "name"?, "kind"?, "finished"? }. Fields left out keep their value. */
+/** Body: { "name"?, "demonstrativa"?, "revezamento"?, "finished"? }. Fields left out keep their value. */
 router.put("/:code/events/:id", ...canManage, async (req: Request, res: Response) => {
     res.json(await updateEvent(code(req), eventId(req), req.body ?? {}));
 });
@@ -57,7 +57,7 @@ router.delete("/:code/events/:id", ...canManage, async (req: Request, res: Respo
     res.json(await deleteEvent(code(req), eventId(req)));
 });
 
-/** Body: { "positions": [teamId | null, ...] }, index 0 = first place. Replaces every result of the event. */
+/** Body: { "positions": [teamId | null, ...] }, index 0 = first place over every athlete; a team may appear twice (once in a relay). Replaces every result of the event. */
 router.put("/:code/events/:id/results", ...canManage, async (req: Request, res: Response) => {
     res.json(await setEventResults(code(req), eventId(req), req.body ?? {}));
 });

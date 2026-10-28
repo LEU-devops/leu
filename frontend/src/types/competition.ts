@@ -12,27 +12,48 @@ export function isEventsModality(type: ModalityType): type is EventsModalityType
     return (EVENTS_MODALITY_TYPES as ModalityType[]).includes(type)
 }
 
-/** How an event scores: normal (PONTUACAO.md table), demonstrativa (no points) or revezamento (double). */
-export type EventKind = 'normal' | 'demonstrativa' | 'revezamento'
+/** How an event scores. The flags are independent: a relay can also be a demonstration. */
+export interface EventFlags {
+    /** Positions are recorded but nobody scores. */
+    demonstrativa: boolean
+    /** Double points, and one athlete per team instead of two. */
+    revezamento: boolean
+}
 
-export const EVENT_KINDS: { value: EventKind; label: string; hint: string }[] = [
-    { value: 'normal', label: 'Normal', hint: 'Pontua pela tabela' },
-    { value: 'demonstrativa', label: 'Demonstrativa', hint: 'Não pontua' },
-    { value: 'revezamento', label: 'Revezamento', hint: 'Pontua em dobro' },
+export const EVENT_FLAGS: { key: keyof EventFlags; label: string; hint: string }[] = [
+    { key: 'revezamento', label: 'Revezamento', hint: 'Pontua em dobro, 1 equipe por time' },
+    { key: 'demonstrativa', label: 'Demonstrativa', hint: 'Não pontua' },
 ]
 
+/** Athletes a team may enter in one event (one in a relay): only the best placed one scores. */
+export const MAX_ATHLETES_PER_TEAM = 2
+
+export function athletesPerTeam(event: EventFlags): number {
+    return event.revezamento ? 1 : MAX_ATHLETES_PER_TEAM
+}
+
+/** One athlete's result in an event. */
+export interface EventEntry {
+    team_id: number
+    /** Over every athlete of the event (1 = first). */
+    position: number
+    /** The team's best athlete: the one that takes a place and scores. */
+    scores: boolean
+    /** Place among the teams (1 = first), for the scoring athlete only. */
+    place: number | null
+    /** Points towards the internal score; null while the event is open, 0 when it does not score. */
+    points: number | null
+}
+
 /** An internal event of an events modality, with its results so far (ordered by position). */
-export interface ModalityEvent {
+export interface ModalityEvent extends EventFlags {
     id: number
     modality_code: string
     name: string
-    kind: EventKind
-    /** Closed by the organizers: no more positions will be filled. */
+    /** Closed by the organizers: the results are final and the event scores. */
     finished: boolean
     sort_order: number
-    results: { team_id: number; position: number }[]
-    /** Points of each position for this event's kind, index 0 = first place; empty when the modality cannot be scored. */
-    points_by_position: number[]
+    results: EventEntry[]
 }
 
 export interface Modality {
