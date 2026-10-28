@@ -12,6 +12,11 @@ const migrations: Knex.MigratorConfig = {
     extension: "ts",
 };
 
+const seeds: Knex.SeederConfig = {
+    directory: path.join(__dirname, "data", "seeds"),
+    extension: "ts",
+};
+
 function developmentConfig(): Knex.Config {
     return {
         client: "better-sqlite3",
@@ -26,6 +31,7 @@ function developmentConfig(): Knex.Config {
             },
         },
         migrations,
+        seeds,
     };
 }
 
@@ -38,6 +44,7 @@ function productionConfig(): Knex.Config {
         connection: { connectionString, ssl: { rejectUnauthorized: false } },
         pool: { min: 0, max: 2, idleTimeoutMillis: 10_000 },
         migrations,
+        seeds,
     };
 }
 
