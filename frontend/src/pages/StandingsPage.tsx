@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import Loading from '../components/Loading'
 import StandingsTable from '../components/standings/StandingsTable'
+import SummaryCards from '../components/standings/SummaryCards'
 import { getToken } from '../services/auth'
-import { getStandings, setTeamScoring, type TeamScoringInput } from '../services/competition'
+import { getMatches, getStandings, setTeamScoring, type TeamScoringInput } from '../services/competition'
+import type { ScheduledMatch } from '../types/competition'
 import type { Standings } from '../types/standings'
 
 function errorMessage(error: unknown): string {
@@ -14,6 +16,7 @@ function errorMessage(error: unknown): string {
 
 export default function StandingsPage() {
     const [standings, setStandings] = useState<Standings | null>(null)
+    const [matches, setMatches] = useState<ScheduledMatch[]>([])
     const [error, setError] = useState<string | null>(null)
     const [saveError, setSaveError] = useState<string | null>(null)
     const [savingTeamId, setSavingTeamId] = useState<number | null>(null)
@@ -21,9 +24,11 @@ export default function StandingsPage() {
 
     useEffect(() => {
         let cancelled = false
-        getStandings()
-            .then((data) => {
-                if (!cancelled) setStandings(data)
+        Promise.all([getStandings(), getMatches()])
+            .then(([data, allMatches]) => {
+                if (cancelled) return
+                setStandings(data)
+                setMatches(allMatches)
             })
             .catch(() => {
                 if (!cancelled) setError('Não foi possível carregar a pontuação.')
@@ -68,6 +73,8 @@ export default function StandingsPage() {
 
             {standings ? (
                 <>
+                    <SummaryCards standings={standings} matches={matches} />
+
                     {standings.teams.length === 0 ? (
                         <p className="text-sm text-zinc-400">Nenhum time cadastrado.</p>
                     ) : (
