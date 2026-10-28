@@ -5,6 +5,7 @@ const publicLinks = [
     { to: '/home', label: 'Home' },
     { to: '/chaveamentos', label: 'Chaveamentos' },
     { to: '/tabela', label: 'Tabela' },
+    { to: '/pontuacao', label: 'Máx e Mín' },
 ]
 
 /** Only offered when logged in; the admin routes themselves require the management permission. */
@@ -20,13 +21,13 @@ export default function AppLayout() {
                         Leu
                     </NavLink>
 
-                    <nav className="flex items-center gap-1">
+                    <nav className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
                         {links.map((link) => (
                             <NavLink
                                 key={link.to}
                                 to={link.to}
                                 className={({ isActive }) =>
-                                    `rounded-xl px-3 py-1.5 text-sm transition ${
+                                    `shrink-0 whitespace-nowrap rounded-xl px-3 py-1.5 text-sm transition ${
                                         isActive ? 'bg-red-950/50 text-zinc-50' : 'text-zinc-300 hover:bg-white/5'
                                     }`
                                 }

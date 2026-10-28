@@ -1,4 +1,5 @@
 import type { BracketMatch, Modality, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { Standings } from '../types/standings'
 import { request } from './api'
 
 export function getModalities(): Promise<Modality[]> {
@@ -75,5 +76,23 @@ export function setMatchSchedule(code: string, matchId: number, schedule: MatchS
     return request(`/modalities/${code}/matches/${matchId}/schedule`, {
         method: 'PUT',
         body: JSON.stringify(schedule),
+    })
+}
+
+/** The "Máx e Mín" table: every team's points (or point range) in every modality, with totals. */
+export function getStandings(): Promise<Standings> {
+    return request('/standings')
+}
+
+export interface TeamScoringInput {
+    bonusTorcida?: boolean
+    penaltyPoints?: number
+}
+
+/** Updates a team's supporters bonus and/or penalty points. Responds with the updated team. */
+export function setTeamScoring(teamId: number, scoring: TeamScoringInput): Promise<Team> {
+    return request(`/teams/${teamId}/scoring`, {
+        method: 'PUT',
+        body: JSON.stringify(scoring),
     })
 }
