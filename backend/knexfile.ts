@@ -39,9 +39,13 @@ function productionConfig(): Knex.Config {
     const connectionString = process.env.SUPABASE_POSTGRES_URL;
     if (!connectionString)
         throw new Error("SUPABASE_POSTGRES_URL must be set when NODE_ENV=production");
+
+    const databaseUrl = new URL(connectionString)
+    // Remove sslmode=require
+    databaseUrl.searchParams.delete('sslmode');
     return {
         client: "pg",
-        connection: { connectionString, ssl: { rejectUnauthorized: false } },
+        connection: { connectionString: databaseUrl.toString(), ssl: { rejectUnauthorized: false } },
         pool: { min: 0, max: 2, idleTimeoutMillis: 10_000 },
         migrations,
         seeds,
