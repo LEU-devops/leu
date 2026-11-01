@@ -23,6 +23,17 @@ function Score({ value, isWinner }: { value: string | null; isWinner: boolean })
     return <span className={`w-6 shrink-0 text-center text-sm tabular-nums ${isWinner ? 'font-bold text-zinc-50' : 'text-zinc-300'}`}>{value ?? ''}</span>
 }
 
+function NeutralRole({ label, name }: { label: string; name: string | null }) {
+    if (!name) return null
+    return (
+        <span className="flex min-w-0 items-center gap-1" title={`${label}: ${name}`}>
+            <span className="shrink-0">{label}:</span>
+            <TeamLogo name={name} className="h-4 w-4" />
+            <span className="truncate">{name}</span>
+        </span>
+    )
+}
+
 function MatchCard({ match }: { match: ScheduledMatch }) {
     const aWins = match.winner_id !== null && match.winner_id === match.team_a_id
     const bWins = match.winner_id !== null && match.winner_id === match.team_b_id
@@ -35,6 +46,7 @@ function MatchCard({ match }: { match: ScheduledMatch }) {
                 </span>
                 <span className="truncate">{STAGE_NAMES[match.stage] ?? match.stage}</span>
                 {match.status === 'live' ? <span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span> : null}
+                {match.walkover ? <span className="font-semibold uppercase tracking-widest text-zinc-300" title="Decidida por W.O.">W.O.</span> : null}
                 <span className="ml-auto shrink-0 tabular-nums">{formatTime(new Date(match.scheduled_at as string))}</span>
             </div>
 
@@ -47,13 +59,12 @@ function MatchCard({ match }: { match: ScheduledMatch }) {
                 <TeamSide name={match.team_b_name} isWinner={bWins} align="right" />
             </div>
 
-            {/* Footer: neutral team, centered */}
-            {match.neutral_team_name ? (
-                <p className="flex items-center justify-center gap-1 border-t border-white/10 px-2 py-1 text-[11px] leading-4 text-zinc-400" title={`Neutra: ${match.neutral_team_name}`}>
-                    <span>Neutra:</span>
-                    <TeamLogo name={match.neutral_team_name} className="h-4 w-4" />
-                    <span className="truncate">{match.neutral_team_name}</span>
-                </p>
+            {/* Footer: neutral teams (redator, mesário), centered */}
+            {match.redator_team_name || match.mesario_team_name ? (
+                <div className="flex items-center justify-center gap-3 border-t border-white/10 px-2 py-1 text-[11px] leading-4 text-zinc-400">
+                    <NeutralRole label="Redator" name={match.redator_team_name} />
+                    <NeutralRole label="Mesário" name={match.mesario_team_name} />
+                </div>
             ) : null}
         </div>
     )

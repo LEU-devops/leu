@@ -1,4 +1,4 @@
-const TOKEN_KEY = 'leubet_token'
+const TOKEN_KEY = 'leu_token'
 
 export function storeToken(token: string) {
     localStorage.setItem(TOKEN_KEY, token)

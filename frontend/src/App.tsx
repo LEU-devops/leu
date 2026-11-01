@@ -6,6 +6,8 @@ import HomePage from './pages/HomePage'
 import BracketsPage from './pages/BracketsPage'
 import SchedulePage from './pages/SchedulePage'
 import AdminPage from './pages/AdminPage'
+import StandingsPage from './pages/StandingsPage'
+import EventsPage from './pages/EventsPage'
 
 export default function App() {
   return (
@@ -18,6 +20,9 @@ export default function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
         <Route path="/tabela" element={<SchedulePage />} />
+        <Route path="/pontuacao" element={<StandingsPage />} />
+        <Route path="/atletismo/:code?" element={<EventsPage type="atletismo" />} />
+        <Route path="/natacao/:code?" element={<EventsPage type="natacao" />} />
         <Route path="/admin" element={<AdminPage />} />
       </Route>
     </Routes>

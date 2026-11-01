@@ -1,5 +1,17 @@
-export const MODALITY_TYPES = ["chaveamento", "fase_unica"] as const;
+export const MODALITY_TYPES = ["chaveamento", "fase_unica", "atletismo", "natacao"] as const;
 export type ModalityType = (typeof MODALITY_TYPES)[number];
+
+/**
+ * Modalities decided by a set of internal events ("provas") rather than by a bracket: athletics
+ * and swimming. Each registered team scores in every event, and the sum of those points gives
+ * the final classification of the modality, which is what counts for the overall standings.
+ */
+export const EVENTS_MODALITY_TYPES = ["atletismo", "natacao"] as const satisfies readonly ModalityType[];
+export type EventsModalityType = (typeof EVENTS_MODALITY_TYPES)[number];
+
+export function isEventsModality(type: ModalityType): type is EventsModalityType {
+    return (EVENTS_MODALITY_TYPES as readonly ModalityType[]).includes(type);
+}
 
 /** Row shape of the `modalities` table. */
 export interface Modality {
@@ -12,6 +24,8 @@ export interface Modality {
 export interface Team {
     id: number;
     name: string;
+    bonus_torcida: boolean;      // supporters ("torcida") bonus earned
+    penalty_points: number;  // points subtracted from the team's total (0 = none)
 }
 
 /** Row shape of the `venues` table. */
@@ -48,8 +62,42 @@ export interface Match {
     next_slot: "a" | "b" | null;
     status: MatchStatus;
     scheduled_at: string | null;   // ISO 8601
+    walkover: boolean;             // decided by WO: winner_id won without the match being played
     venue_id: number | null;
-    neutral_team_id: number | null; // team acting as neutral representative
+    redator_team_id: number | null; // neutral team writing the match report (súmula)
+    mesario_team_id: number | null; // neutral team running the table/scoreboard
+}
+
+/** Row shape of the `registrations` table: a team taking part in an events modality (atletismo, natação). */
+export interface Registration {
+    modality_code: string;
+    team_id: number;
+}
+
+/** The flags that say how an event scores; independent, so a relay can also be a demonstration. */
+export interface EventFlags {
+    /** Positions are recorded but nobody scores. */
+    demonstrativa: boolean;
+    /** Double points, and a single athlete (the relay team) per team instead of two. */
+    revezamento: boolean;
+}
+
+/** Row shape of the `events` table: an internal event ("prova") of an events modality, e.g. "100m rasos". */
+export interface Event extends EventFlags {
+    id: number;
+    modality_code: string;
+    name: string;
+    /** Closed by the organizers: the results are final and the event scores. */
+    finished: boolean;
+    /** Display order within the modality. */
+    sort_order: number;
+}
+
+/** Row shape of the `event_results` table: the team of the athlete that finished an event in a position (1 = first). */
+export interface EventResult {
+    event_id: number;
+    team_id: number;
+    position: number;
 }
 
 /** Maximum number of teams in a bracket (oitavas de final). */
@@ -62,5 +110,8 @@ declare module "knex/types/tables" {
         venues: Venue;
         matches: Match;
         time_slots: TimeSlot;
+        registrations: Registration;
+        events: Event;
+        event_results: EventResult;
     }
 }

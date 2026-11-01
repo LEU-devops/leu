@@ -36,15 +36,18 @@ function MatchCard({ match, venuePath, onClick }: { match: BracketMatch; venuePa
                 <TeamRow name={match.team_b_name} score={match.score_b} isWinner={match.winner_id !== null && match.winner_id === match.team_b_id} />
             </div>
 
-            {/* When, where and who runs the table */}
+            {/* When, where, W.O. and the neutral teams (redator, mesário) */}
             <div className="flex w-32 min-w-0 flex-col justify-center gap-0.5 border-l border-white/10 bg-white/3 px-2 py-1">
                 {match.status === 'live' ? <InfoLine><span className="font-semibold uppercase tracking-widest text-red-400">Ao vivo</span></InfoLine> : null}
+                {match.walkover ? <InfoLine title="Decidida por W.O."><span className="font-semibold uppercase tracking-widest text-zinc-300">W.O.</span></InfoLine> : null}
                 <InfoLine muted={!when}>{when ?? 'Sem data'}</InfoLine>
                 <InfoLine muted={!venuePath} title={venuePath ?? undefined}>{venuePath ?? 'Sem local'}</InfoLine>
-                {match.neutral_team_name ? (
-                    <InfoLine title={`Neutra: ${match.neutral_team_name}`}>
-                        <span className="shrink-0">Neutra:</span>
-                        <TeamLogo name={match.neutral_team_name} className="h-4 w-4" />
+                {match.redator_team_name || match.mesario_team_name ? (
+                    <InfoLine title={`Redator: ${match.redator_team_name ?? '—'} · Mesário: ${match.mesario_team_name ?? '—'}`}>
+                        <span className="shrink-0">Red.</span>
+                        {match.redator_team_name ? <TeamLogo name={match.redator_team_name} className="h-4 w-4" /> : <span className="text-zinc-600">—</span>}
+                        <span className="ml-1 shrink-0">Mes.</span>
+                        {match.mesario_team_name ? <TeamLogo name={match.mesario_team_name} className="h-4 w-4" /> : <span className="text-zinc-600">—</span>}
                     </InfoLine>
                 ) : null}
             </div>

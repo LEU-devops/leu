@@ -5,10 +5,12 @@ import { version } from '../package.json'
 
 import authRoutes from './modules/auth/routes'
 import modalitiesRoutes from './modules/modalities/routes'
+import eventsRoutes from './modules/events/routes'
 import matchesRoutes from './modules/matches/routes'
 import teamsRoutes from './modules/teams/routes'
 import venuesRoutes from './modules/venues/routes'
 import timeSlotsRoutes from './modules/time-slots/routes'
+import standingsRoutes from './modules/standings/routes'
 
 import { errorMiddleware } from './middlewares/error.middleware';
 config({ quiet: true })
@@ -36,15 +38,17 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 app.get("/", (_, res) => {
-    res.send(`LEU Bet v${version}`);
+    res.send(`LEU v${version}`);
 });
 
 app.use('/auth', authRoutes)
 app.use('/modalities', modalitiesRoutes)
+app.use('/modalities', eventsRoutes) // atletismo, natação: registrations and internal events
 app.use('/matches', matchesRoutes)
 app.use('/teams', teamsRoutes)
 app.use('/venues', venuesRoutes)
 app.use('/time-slots', timeSlotsRoutes)
+app.use('/standings', standingsRoutes)
 
 app.use(errorMiddleware)
 

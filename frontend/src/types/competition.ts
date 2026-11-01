@@ -1,4 +1,60 @@
-export type ModalityType = 'chaveamento' | 'fase_unica'
+export type ModalityType = 'chaveamento' | 'fase_unica' | EventsModalityType
+
+/**
+ * Modalities decided by a set of internal events ("provas") instead of a bracket: athletics and
+ * swimming. Each has its own page, listing the modalities of that type (masculino, feminino, absoluto).
+ */
+export type EventsModalityType = 'atletismo' | 'natacao'
+
+export const EVENTS_MODALITY_TYPES: EventsModalityType[] = ['atletismo', 'natacao']
+
+export function isEventsModality(type: ModalityType): type is EventsModalityType {
+    return (EVENTS_MODALITY_TYPES as ModalityType[]).includes(type)
+}
+
+/** How an event scores. The flags are independent: a relay can also be a demonstration. */
+export interface EventFlags {
+    /** Positions are recorded but nobody scores. */
+    demonstrativa: boolean
+    /** Double points, and one athlete per team instead of two. */
+    revezamento: boolean
+}
+
+export const EVENT_FLAGS: { key: keyof EventFlags; label: string; hint: string }[] = [
+    { key: 'revezamento', label: 'Revezamento', hint: 'Pontua em dobro, 1 equipe por time' },
+    { key: 'demonstrativa', label: 'Demonstrativa', hint: 'Não pontua' },
+]
+
+/** Athletes a team may enter in one event (one in a relay): only the best placed one scores. */
+export const MAX_ATHLETES_PER_TEAM = 2
+
+export function athletesPerTeam(event: EventFlags): number {
+    return event.revezamento ? 1 : MAX_ATHLETES_PER_TEAM
+}
+
+/** One athlete's result in an event. */
+export interface EventEntry {
+    team_id: number
+    /** Over every athlete of the event (1 = first). */
+    position: number
+    /** The team's best athlete: the one that takes a place and scores. */
+    scores: boolean
+    /** Place among the teams (1 = first), for the scoring athlete only. */
+    place: number | null
+    /** Points towards the internal score; null while the event is open, 0 when it does not score. */
+    points: number | null
+}
+
+/** An internal event of an events modality, with its results so far (ordered by position). */
+export interface ModalityEvent extends EventFlags {
+    id: number
+    modality_code: string
+    name: string
+    /** Closed by the organizers: the results are final and the event scores. */
+    finished: boolean
+    sort_order: number
+    results: EventEntry[]
+}
 
 export interface Modality {
     code: string
@@ -9,6 +65,10 @@ export interface Modality {
 export interface Team {
     id: number
     name: string
+    /** Supporters ("torcida") bonus earned. Used by the scoring page. */
+    bonus_torcida: boolean
+    /** Points subtracted from the team's total (0 = none). Used by the scoring page. */
+    penalty_points: number
 }
 
 /** A venue with its full path, e.g. "FEF > Complexo de Vôlei > Q1". */
@@ -45,11 +105,17 @@ export interface BracketMatch {
     next_match_id: number | null
     next_slot: 'a' | 'b' | null
     status: MatchStatus
+    /** Decided by W.O.: `winner_id` won without the match being played. */
+    walkover: boolean
     scheduled_at: string | null
     venue_id: number | null
     venue_name: string | null
-    neutral_team_id: number | null
-    neutral_team_name: string | null
+    /** Neutral team writing the match report (súmula). */
+    redator_team_id: number | null
+    redator_team_name: string | null
+    /** Neutral team running the table/scoreboard. */
+    mesario_team_id: number | null
+    mesario_team_name: string | null
 }
 
 /** A match of any modality as returned by GET /matches. */

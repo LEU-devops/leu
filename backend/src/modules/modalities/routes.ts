@@ -53,7 +53,10 @@ router.post("/:code/bracket", ...canManage, async (req: Request, res: Response) 
 
 // --- RESULTS ---
 
-/** Body: { "scoreA": "2", "scoreB": "2 (4)", "winner": "a" | "b" }. Responds with the whole bracket. */
+/**
+ * Body: { "scoreA": "2", "scoreB": "2 (4)", "winner": "a" | "b", "walkover": false }.
+ * `walkover` is optional (default false); set it to true when the winner won by WO. Responds with the whole bracket.
+ */
 router.put("/:code/matches/:id/result", ...canManage, async (req: Request, res: Response) => {
     const code = String(req.params.code).toUpperCase();
     res.json(await setMatchResult(code, Number(req.params.id), req.body ?? {}));
@@ -67,7 +70,10 @@ router.delete("/:code/matches/:id/result", ...canManage, async (req: Request, re
 
 // --- SCHEDULE ---
 
-/** Body: { "scheduledAt": "2026-11-07T17:00:00.000Z" | null, "venueId": 3 | null, "neutralTeamId": 5 | null }. Responds with the whole bracket. */
+/**
+ * Body: { "scheduledAt": "2026-11-07T17:00:00.000Z" | null, "venueId": 3 | null, "redatorTeamId": 5 | null, "mesarioTeamId": 5 | null }.
+ * Responds with the whole bracket.
+ */
 router.put("/:code/matches/:id/schedule", ...canManage, async (req: Request, res: Response) => {
     const code = String(req.params.code).toUpperCase();
     res.json(await setMatchSchedule(code, Number(req.params.id), req.body ?? {}));

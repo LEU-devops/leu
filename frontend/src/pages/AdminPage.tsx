@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import Loading from '../components/Loading'
+import VenuesSection from '../components/admin/VenuesSection'
 import { createTimeSlot, deleteTimeSlot, getTimeSlots } from '../services/competition'
 import type { TimeSlot } from '../types/competition'
 
@@ -162,6 +163,7 @@ export default function AdminPage() {
             </div>
 
             <TimeSlotsSection />
+            <VenuesSection />
         </main>
     )
 }
