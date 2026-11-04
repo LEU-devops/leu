@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { storeToken } from '../services/auth'
 
 type LoginResponse = {
@@ -8,6 +8,7 @@ type LoginResponse = {
 
 export default function LoginPage() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState<string | null>(null)
@@ -28,12 +29,16 @@ export default function LoginPage() {
             })
 
             if (!response.ok) {
-                throw new Error('E-mail ou senha incorretos')
+                const message = await response.text()
+                throw new Error(message || 'E-mail ou senha incorretos')
             }
 
             const data = (await response.json()) as LoginResponse
             storeToken(data.token)
-            navigate('/home', { replace: true })
+
+            const redirect = searchParams.get('redirect')
+            const target = redirect && redirect.startsWith('/') ? redirect : '/home'
+            navigate(target, { replace: true })
         } catch (submitError) {
             setError(submitError instanceof Error ? submitError.message : 'Não foi possível realizar o login. Tente novamente mais tarde.')
         } finally {
@@ -90,7 +95,15 @@ export default function LoginPage() {
 
                 <p className="mt-5 text-sm text-zinc-400">
                     Ainda não tem conta?{' '}
-                    <button type="button" className="font-medium text-red-300 transition hover:text-red-200" onClick={() => navigate('/register')}>
+                    <button
+                        type="button"
+                        className="font-medium text-red-300 transition hover:text-red-200"
+                        onClick={() => {
+                            const redirect = searchParams.get('redirect')
+                            const query = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
+                            navigate(`/register${query}`)
+                        }}
+                    >
                         Criar uma conta
                     </button>
                 </p>

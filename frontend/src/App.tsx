@@ -8,6 +8,9 @@ import SchedulePage from './pages/SchedulePage'
 import AdminPage from './pages/AdminPage'
 import StandingsPage from './pages/StandingsPage'
 import EventsPage from './pages/EventsPage'
+import OrganizationsPage from './pages/OrganizationsPage'
+import OrganizationDetailPage from './pages/OrganizationDetailPage'
+import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
   return (
@@ -18,6 +21,9 @@ export default function App() {
 
       <Route element={<AppLayout />}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/entidades" element={<OrganizationsPage />} />
+        <Route path="/entidades/:id" element={<OrganizationDetailPage />} />
+        <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
         <Route path="/tabela" element={<SchedulePage />} />
         <Route path="/pontuacao" element={<StandingsPage />} />

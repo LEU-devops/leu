@@ -1,4 +1,5 @@
 import type { BracketMatch, EventFlags, Modality, ModalityEvent, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { OrganizationHierarchy } from '../types/organizations'
 import type { EventsStandings, Standings } from '../types/standings'
 import { request } from './api'
 
@@ -8,6 +9,14 @@ export function getModalities(): Promise<Modality[]> {
 
 export function getTeams(): Promise<Team[]> {
     return request('/teams')
+}
+
+export function getOrganizations(): Promise<OrganizationHierarchy[]> {
+    return request('/organizations')
+}
+
+export function getOrganization(id: number): Promise<OrganizationHierarchy> {
+    return request(`/organizations/${id}`)
 }
 
 export function getVenues(): Promise<Venue[]> {

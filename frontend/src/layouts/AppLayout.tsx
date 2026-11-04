@@ -1,8 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom'
-import { getToken } from '../services/auth'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { getDisplayName, getLoggedUser, getToken } from '../services/auth'
+import { getOrganizations } from '../services/competition'
+import type { OrganizationHierarchy } from '../types/organizations'
 
 const publicLinks = [
     { to: '/home', label: 'Home' },
+    { to: '/entidades', label: 'Entidades' },
     { to: '/chaveamentos', label: 'Chaveamentos' },
     { to: '/tabela', label: 'Tabela' },
     { to: '/atletismo', label: 'Atletismo' },
@@ -13,8 +17,103 @@ const publicLinks = [
 /** Only offered when logged in; the admin routes themselves require the management permission. */
 const adminLinks = [{ to: '/admin', label: 'Admin' }]
 
+interface ManageOrganizationItem {
+    id: number
+    name: string
+}
+
+function profileInitials(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean)
+    if (parts.length === 0)
+        return 'U'
+    if (parts.length === 1)
+        return parts[0].slice(0, 2).toUpperCase()
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+}
+
+function organizationsToManage(organizations: OrganizationHierarchy[], userEmail: string): ManageOrganizationItem[] {
+    return organizations
+        .filter((organization) => organization.members.some((member) => member.email === userEmail && (member.role === 'presidente' || member.role === 'vice')))
+        .map((organization) => ({ id: organization.id, name: organization.name }))
+}
+
 export default function AppLayout() {
+    const navigate = useNavigate()
+    const location = useLocation()
+
     const links = getToken() ? [...publicLinks, ...adminLinks] : publicLinks
+    const user = getLoggedUser()
+    const displayName = user ? getDisplayName(user) : null
+    const profileButtonName = user?.nickname ?? null
+
+    const [menuOpen, setMenuOpen] = useState(false)
+    const [manageOrgs, setManageOrgs] = useState<ManageOrganizationItem[]>([])
+    const menuRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+        if (!user) {
+            setManageOrgs([])
+            return
+        }
+
+        let cancelled = false
+        getOrganizations()
+            .then((organizations) => {
+                if (cancelled)
+                    return
+                setManageOrgs(organizationsToManage(organizations, user.email))
+            })
+            .catch(() => {
+                if (!cancelled)
+                    setManageOrgs([])
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [user?.email])
+
+    useEffect(() => {
+        setMenuOpen(false)
+    }, [location.pathname, location.search])
+
+    useEffect(() => {
+        if (!menuOpen)
+            return
+
+        function handleClickOutside(event: MouseEvent) {
+            if (!menuRef.current)
+                return
+            if (event.target instanceof Node && !menuRef.current.contains(event.target))
+                setMenuOpen(false)
+        }
+
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === 'Escape')
+                setMenuOpen(false)
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener('keydown', handleEscape)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+            document.removeEventListener('keydown', handleEscape)
+        }
+    }, [menuOpen])
+
+    const redirectTarget = useMemo(() => {
+        const current = `${location.pathname}${location.search}${location.hash}`
+        return `/login?redirect=${encodeURIComponent(current)}`
+    }, [location.pathname, location.search, location.hash])
+
+    function onProfileClick() {
+        if (!user) {
+            navigate(redirectTarget)
+            return
+        }
+        setMenuOpen((open) => !open)
+    }
+    console.log(user)
     return (
         <div className="relative z-10 flex min-h-screen flex-col">
             <header className="sticky top-0 z-20 border-b border-white/10 bg-black/65 backdrop-blur">
@@ -23,7 +122,7 @@ export default function AppLayout() {
                         Leu
                     </NavLink>
 
-                    <nav className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+                    <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
                         {links.map((link) => (
                             <NavLink
                                 key={link.to}
@@ -38,6 +137,57 @@ export default function AppLayout() {
                             </NavLink>
                         ))}
                     </nav>
+
+                    <div ref={menuRef} className="relative">
+                        <button
+                            type="button"
+                            onClick={onProfileClick}
+                            className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-left transition hover:bg-white/10"
+                        >
+                            {user?.profile_photo_url ? (
+                                <img
+                                    src={`${import.meta.env.VITE_API_URL}${user.profile_photo_url}`}
+                                    alt="Foto de perfil"
+                                    className="h-8 w-8 rounded-full object-cover"
+                                />
+                            ) : (
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-700/80 text-xs font-semibold text-white">
+                                    {user && profileButtonName ? profileInitials(profileButtonName) : '→'}
+                                </span>
+                            )}
+                            <span className="hidden max-w-[10rem] truncate text-sm text-zinc-200 sm:block">
+                                {user && profileButtonName ? profileButtonName : 'Fazer Login'}
+                            </span>
+                        </button>
+
+                        {user && menuOpen ? (
+                            <div className="absolute right-0 top-12 w-64 rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-2xl shadow-black/50">
+                                <div className="px-2 py-1.5">
+                                    <p className="truncate text-sm font-semibold text-zinc-100">{displayName}</p>
+                                    <p className="truncate text-xs text-zinc-500">{user.email}</p>
+                                </div>
+
+                                <div className="my-1 h-px bg-white/10" />
+
+                                <Link
+                                    to="/perfil"
+                                    className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                >
+                                    Gerenciar Perfil
+                                </Link>
+
+                                {manageOrgs.map((organization) => (
+                                    <Link
+                                        key={organization.id}
+                                        to={`/entidades/${organization.id}`}
+                                        className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                    >
+                                        Gerenciar {organization.name}
+                                    </Link>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
             </header>
 

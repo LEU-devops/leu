@@ -96,29 +96,29 @@ export async function seed(knex: Knex): Promise<void> {
     ]);
 
     await knex("events").insert([
-        { modality_code: "ATM", name: "100m rasos", sort_order: 0 },
-        { modality_code: "ATM", name: "400m", sort_order: 1 },
-        { modality_code: "ATM", name: "1500m", sort_order: 2 },
+        { modality_code: "ATM", name: "100m rasos", revezamento: false, demonstrativa: false, sort_order: 0 },
+        { modality_code: "ATM", name: "400m", revezamento: false, demonstrativa: false, sort_order: 1 },
+        { modality_code: "ATM", name: "1500m", revezamento: false, demonstrativa: false, sort_order: 2 },
 
-        { modality_code: "ATF", name: "100m rasos", sort_order: 0 },
-        { modality_code: "ATF", name: "400m", sort_order: 1 },
-        { modality_code: "ATF", name: "1500m", sort_order: 2 },
+        { modality_code: "ATF", name: "100m rasos", revezamento: false, demonstrativa: false, sort_order: 0 },
+        { modality_code: "ATF", name: "400m", revezamento: false, demonstrativa: false, sort_order: 1 },
+        { modality_code: "ATF", name: "1500m", revezamento: false, demonstrativa: false, sort_order: 2 },
 
-        { modality_code: "NTM", name: "50m borboleta", sort_order: 0 },
-        { modality_code: "NTM", name: "50m costas", sort_order: 1 },
-        { modality_code: "NTM", name: "50m peito", sort_order: 2 },
-        { modality_code: "NTM", name: "50m livre", sort_order: 3 },
-        { modality_code: "NTM", name: "Revezamento 4x50m livre", revezamento: true, sort_order: 4 },
-        { modality_code: "NTM", name: "100m medley", sort_order: 5 },
-        { modality_code: "NTM", name: "Revezamento 4x50m medley", revezamento: true, demonstrativo: true, sort_order: 6 },
+        { modality_code: "NTM", name: "50m borboleta", revezamento: false, demonstrativa: false, sort_order: 0 },
+        { modality_code: "NTM", name: "50m costas", revezamento: false, demonstrativa: false, sort_order: 1 },
+        { modality_code: "NTM", name: "50m peito", revezamento: false, demonstrativa: false, sort_order: 2 },
+        { modality_code: "NTM", name: "50m livre", revezamento: false, demonstrativa: false, sort_order: 3 },
+        { modality_code: "NTM", name: "Revezamento 4x50m livre", revezamento: true, demonstrativa: false, sort_order: 4 },
+        { modality_code: "NTM", name: "100m medley", revezamento: false, demonstrativa: false, sort_order: 5 },
+        { modality_code: "NTM", name: "Revezamento 4x50m medley", revezamento: true, demonstrativa: true, sort_order: 6 },
 
-        { modality_code: "NTF", name: "50m borboleta", sort_order: 0 },
-        { modality_code: "NTF", name: "50m costas", sort_order: 1 },
-        { modality_code: "NTF", name: "50m peito", sort_order: 2 },
-        { modality_code: "NTF", name: "50m livre", sort_order: 3 },
-        { modality_code: "NTF", name: "Revezamento 4x50m livre", revezamento: true, sort_order: 4 },
-        { modality_code: "NTF", name: "100m medley", sort_order: 5 },
-        { modality_code: "NTF", name: "Revezamento 4x50m medley", revezamento: true, demonstrativo: true, sort_order: 6 },
+        { modality_code: "NTF", name: "50m borboleta", revezamento: false, demonstrativa: false, sort_order: 0 },
+        { modality_code: "NTF", name: "50m costas", revezamento: false, demonstrativa: false, sort_order: 1 },
+        { modality_code: "NTF", name: "50m peito", revezamento: false, demonstrativa: false, sort_order: 2 },
+        { modality_code: "NTF", name: "50m livre", revezamento: false, demonstrativa: false, sort_order: 3 },
+        { modality_code: "NTF", name: "Revezamento 4x50m livre", revezamento: true, demonstrativa: false, sort_order: 4 },
+        { modality_code: "NTF", name: "100m medley", revezamento: false, demonstrativa: false, sort_order: 5 },
+        { modality_code: "NTF", name: "Revezamento 4x50m medley", revezamento: true, demonstrativa: true, sort_order: 6 },
 
     ]);
 }

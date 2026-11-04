@@ -1,12 +1,16 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export default function RegisterPage() {
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [name, setName] = useState('')
+    const [nickname, setNickname] = useState('')
+    const [fullName, setFullName] = useState('')
+    const [ra, setRa] = useState('')
+    const [cpf, setCpf] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -27,11 +31,19 @@ export default function RegisterPage() {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ email, password, name }),
+                body: JSON.stringify({
+                    email,
+                    password,
+                    nickname,
+                    fullName: fullName.trim() || null,
+                    ra: ra.trim() || null,
+                    cpf: cpf.trim() || null,
+                }),
             })
 
             if (!response.ok) {
-                throw new Error('Não foi possível criar a conta. Verifique os dados e tente novamente.')
+                const message = await response.text()
+                throw new Error(message || 'Não foi possível criar a conta. Verifique os dados e tente novamente.')
             }
 
             navigate('/login', { replace: true })
@@ -53,15 +65,27 @@ export default function RegisterPage() {
 
                 <form className="space-y-4" onSubmit={handleSubmit}>
                     <label className="block space-y-2">
-                        <span className="text-sm font-medium text-zinc-200">Nome</span>
+                        <span className="text-sm font-medium text-zinc-200">Apelido</span>
                         <input
                             className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-zinc-50 outline-none transition placeholder:text-zinc-500 focus:border-red-600 focus:bg-white/8"
                             type="text"
                             autoComplete="name"
-                            value={name}
-                            onChange={(event) => setName(event.target.value)}
-                            placeholder="Your name"
+                            value={nickname}
+                            onChange={(event) => setNickname(event.target.value)}
+                            placeholder="Como quer aparecer"
                             required
+                        />
+                    </label>
+
+                    <label className="block space-y-2">
+                        <span className="text-sm font-medium text-zinc-200">Nome completo (opcional)</span>
+                        <input
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-zinc-50 outline-none transition placeholder:text-zinc-500 focus:border-red-600 focus:bg-white/8"
+                            type="text"
+                            autoComplete="name"
+                            value={fullName}
+                            onChange={(event) => setFullName(event.target.value)}
+                            placeholder="Nome completo"
                         />
                     </label>
 
@@ -75,6 +99,30 @@ export default function RegisterPage() {
                             onChange={(event) => setEmail(event.target.value)}
                             placeholder="name@dac.unicamp.br"
                             required
+                        />
+                    </label>
+
+                    <label className="block space-y-2">
+                        <span className="text-sm font-medium text-zinc-200">RA (opcional)</span>
+                        <input
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-zinc-50 outline-none transition placeholder:text-zinc-500 focus:border-red-600 focus:bg-white/8"
+                            type="text"
+                            inputMode="numeric"
+                            value={ra}
+                            onChange={(event) => setRa(event.target.value)}
+                            placeholder="6 dígitos"
+                        />
+                    </label>
+
+                    <label className="block space-y-2">
+                        <span className="text-sm font-medium text-zinc-200">CPF (opcional)</span>
+                        <input
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-zinc-50 outline-none transition placeholder:text-zinc-500 focus:border-red-600 focus:bg-white/8"
+                            type="text"
+                            inputMode="numeric"
+                            value={cpf}
+                            onChange={(event) => setCpf(event.target.value)}
+                            placeholder="11 dígitos"
                         />
                     </label>
 
@@ -117,7 +165,15 @@ export default function RegisterPage() {
 
                 <p className="mt-5 text-sm text-zinc-400">
                     Já tem conta?{' '}
-                    <button type="button" className="font-medium text-red-300 transition hover:text-red-200" onClick={() => navigate('/login')}>
+                    <button
+                        type="button"
+                        className="font-medium text-red-300 transition hover:text-red-200"
+                        onClick={() => {
+                            const redirect = searchParams.get('redirect')
+                            const query = redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''
+                            navigate(`/login${query}`)
+                        }}
+                    >
                         Ir para o login
                     </button>
                 </p>
