@@ -2,29 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import { getOrganizations } from '../services/competition'
-import { canManageOrganizationMembers } from '../services/organizations'
+import { getOrganizationPermissions } from '../services/organizations'
+import OrganizationHeader from '../components/OrganizationHeader'
+import { organizationBackground } from '../utils/gradient'
+import type { OrganizationPermissions } from '../types/organizations'
 import type { OrganizationHierarchy, OrganizationMember } from '../types/organizations'
-
-function OrganizationLogo({ name }: { name: string }) {
-    const [hasError, setHasError] = useState(false)
-
-    if (hasError) {
-        return (
-            <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-xs font-semibold text-zinc-300">
-                {name.slice(0, 3).toUpperCase()}
-            </span>
-        )
-    }
-
-    return (
-        <img
-            src={`/logos/${name}.png`}
-            alt={`Logo ${name}`}
-            className="h-14 w-14 shrink-0 rounded-2xl border border-white/10 bg-black/20 object-contain p-1"
-            onError={() => setHasError(true)}
-        />
-    )
-}
 
 function memberInitials(name: string): string {
     const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -83,12 +65,15 @@ function MemberAvatar({ member, size, caption }: { member: OrganizationMember, s
     )
 }
 
-function SectionHeading({ title, count }: { title: string, count: number }) {
+function SectionHeading({ title, count, accent }: { title: string, count?: number, accent?: string | null }) {
     return (
         <div className="flex items-center gap-4">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-300">{title}</h2>
-            <span className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
-            <span className="text-xs tabular-nums text-zinc-500">{count}</span>
+            <h2 className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-300" style={{ color: accent ?? undefined }}>{title}</h2>
+            <span
+                className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent"
+                style={accent ? { backgroundImage: `linear-gradient(to right, ${accent}80, transparent)` } : undefined}
+            />
+            {count !== undefined ? <span className="text-xs tabular-nums text-zinc-500">{count}</span> : null}
         </div>
     )
 }
@@ -96,6 +81,8 @@ function SectionHeading({ title, count }: { title: string, count: number }) {
 function EmptyState({ text }: { text: string }) {
     return <p className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-500">{text}</p>
 }
+
+const MANAGE_BUTTON = 'shrink-0 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-medium text-zinc-100 transition hover:bg-white/10'
 
 export default function OrganizationDetailPage() {
     const params = useParams()
@@ -105,15 +92,15 @@ export default function OrganizationDetailPage() {
     const [associations, setAssociations] = useState<OrganizationHierarchy[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [canManage, setCanManage] = useState(false)
+    const [permissions, setPermissions] = useState<OrganizationPermissions>({ canManageMembers: false, canManageIdentity: false })
 
     useEffect(() => {
         if (!Number.isInteger(id) || id <= 0)
             return
         let cancelled = false
-        canManageOrganizationMembers(id)
-            .then((allowed) => !cancelled && setCanManage(allowed))
-            .catch(() => !cancelled && setCanManage(false))
+        getOrganizationPermissions(id)
+            .then((result) => !cancelled && setPermissions(result))
+            .catch(() => undefined)
         return () => {
             cancelled = true
         }
@@ -182,6 +169,8 @@ export default function OrganizationDetailPage() {
                 .map((association) => ({
                     id: association.id,
                     name: association.name,
+                    gradient: association.gradient,
+                    accent: association.accent_color,
                     members: association.members
                         .filter((member) => member.role === 'presidente' || member.role === 'vice')
                         .sort((a, b) => (a.role === b.role ? 0 : a.role === 'presidente' ? -1 : 1)),
@@ -199,25 +188,23 @@ export default function OrganizationDetailPage() {
                 </Link>
 
                 {organization ? (
-                    <header
-                        className="flex items-center gap-3 rounded-3xl border border-white/10 bg-black/40 p-4"
-                        style={{ backgroundImage: `${organization.gradient}, radial-gradient(circle at top right, rgb(255 255 255 / 0.08), transparent 55%)` }}
-                    >
-                        <OrganizationLogo name={organization.name} />
-                        <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Entidade</p>
-                            <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{organization.name}</h1>
-                            <p className="text-sm text-zinc-400">{organization.description || 'Sem descrição cadastrada.'}</p>
-                        </div>
-                        {canManage ? (
-                            <Link
-                                to={`/entidades/${organization.id}/membros`}
-                                className="ml-auto shrink-0 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-medium text-zinc-100 transition hover:bg-white/10"
-                            >
-                                Gerenciar membros
-                            </Link>
-                        ) : null}
-                    </header>
+                    <OrganizationHeader
+                        organization={organization}
+                        actions={(
+                            <>
+                                {permissions.canManageIdentity ? (
+                                    <Link to={`/entidades/${organization.id}/identidade`} className={MANAGE_BUTTON}>
+                                        Identidade visual
+                                    </Link>
+                                ) : null}
+                                {permissions.canManageMembers ? (
+                                    <Link to={`/entidades/${organization.id}/membros`} className={MANAGE_BUTTON}>
+                                        Gerenciar membros
+                                    </Link>
+                                ) : null}
+                            </>
+                        )}
+                    />
                 ) : null}
             </div>
 
@@ -226,8 +213,14 @@ export default function OrganizationDetailPage() {
 
             {!loading && !error && organization ? (
                 <div className="mx-auto max-w-6xl space-y-12 pt-2">
+                    {organization.about ? (
+                        <section className="space-y-4">
+                            <SectionHeading accent={organization.accent_color} title="Sobre" />
+                            <p className="mx-auto max-w-3xl whitespace-pre-line text-center text-sm leading-relaxed text-zinc-300">{organization.about}</p>
+                        </section>
+                    ) : null}
                     <section className="space-y-6">
-                        <SectionHeading title="Presidência" count={sections.presidencia.length} />
+                        <SectionHeading accent={organization.accent_color} title="Presidência" count={sections.presidencia.length} />
                         {sections.presidencia.length > 0 ? (
                             <ul className="flex flex-wrap justify-center gap-x-10 gap-y-6">
                                 {sections.presidencia.map((member) => (
@@ -245,7 +238,7 @@ export default function OrganizationDetailPage() {
                     </section>
 
                     <section className="space-y-6">
-                        <SectionHeading title="Diretoria" count={sections.diretoriaCount} />
+                        <SectionHeading accent={organization.accent_color} title="Diretoria" count={sections.diretoriaCount} />
                         {sections.diretoria.length > 0 ? (
                             <div className="flex flex-wrap justify-center gap-x-20 gap-y-12">
                                 {sections.diretoria.map((group) => (
@@ -265,7 +258,7 @@ export default function OrganizationDetailPage() {
                     </section>
 
                     <section className="space-y-6">
-                        <SectionHeading title="Conselho" count={sections.conselho.length} />
+                        <SectionHeading accent={organization.accent_color} title="Conselho" count={sections.conselho.length} />
                         {sections.conselho.length > 0 ? (
                             <ul className="flex flex-wrap justify-center gap-x-8 gap-y-6">
                                 {sections.conselho.map((member) => (
@@ -280,6 +273,7 @@ export default function OrganizationDetailPage() {
                     {sections.diretoriaInterna.length > 0 ? (
                         <section className="space-y-6">
                             <SectionHeading
+                                accent={organization.accent_color}
                                 title="Diretoria interna"
                                 count={sections.diretoriaInterna.reduce((total, association) => total + association.members.length, 0)}
                             />
@@ -287,11 +281,16 @@ export default function OrganizationDetailPage() {
                                 {sections.diretoriaInterna.map((association) => (
                                     <article
                                         key={association.id}
-                                        className="flex flex-col items-center rounded-3xl border border-white/10 bg-white/[0.03] px-6 pb-6 pt-5"
+                                        className="flex flex-col items-center rounded-3xl border border-white/10 bg-black/40 px-6 pb-6 pt-5 shadow-xl shadow-black/25"
+                                        style={{
+                                            backgroundImage: organizationBackground(association.gradient),
+                                            borderColor: association.accent ? `${association.accent}66` : undefined,
+                                        }}
                                     >
                                         <Link
                                             to={`/entidades/${association.id}`}
                                             className="mb-5 text-lg font-semibold tracking-tight text-zinc-100 transition hover:text-white"
+                                            style={{ color: association.accent ?? undefined }}
                                         >
                                             {association.name}
                                         </Link>
@@ -312,7 +311,7 @@ export default function OrganizationDetailPage() {
                     ) : null}
 
                     <section className="space-y-6">
-                        <SectionHeading title="Gestão" count={sections.gestao.length} />
+                        <SectionHeading accent={organization.accent_color} title="Gestão" count={sections.gestao.length} />
                         {sections.gestao.length > 0 ? (
                             <ul className="flex flex-wrap justify-center gap-x-6 gap-y-6">
                                 {sections.gestao.map((member) => (

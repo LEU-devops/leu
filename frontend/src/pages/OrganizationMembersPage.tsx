@@ -5,7 +5,7 @@ import Loading from '../components/Loading'
 import Select from '../components/Select'
 import { getLoggedUser } from '../services/auth'
 import { getOrganizations } from '../services/competition'
-import { canManageOrganizationMembers, searchUsersForOrganization, updateOrganizationMembers } from '../services/organizations'
+import { getOrganizationPermissions, searchUsersForOrganization, updateOrganizationMembers } from '../services/organizations'
 import type { MemberAddition, OrganizationHierarchy, OrganizationMember, OrganizationRole, UserSearchResult } from '../types/organizations'
 
 const ROLE_OPTIONS: { value: OrganizationRole, label: string }[] = [
@@ -298,7 +298,7 @@ export default function OrganizationMembersPage() {
             return
 
         let cancelled = false
-        Promise.all([getOrganizations(), canManageOrganizationMembers(id)])
+        Promise.all([getOrganizations(), getOrganizationPermissions(id).then((result) => result.canManageMembers)])
             .then(([all, allowed]) => {
                 if (cancelled)
                     return

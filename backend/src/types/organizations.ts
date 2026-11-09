@@ -5,6 +5,14 @@ export interface Organization {
     name: string;
     description: string | null;
     gradient: string;
+    logo_url: string | null;
+    banner_url: string | null;
+    accent_color: string | null;
+    about: string | null;
+    instagram: string | null;
+    website: string | null;
+    contact_email: string | null;
+    store_url: string | null;
 }
 
 export interface OrganizationUser {

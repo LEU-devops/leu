@@ -1,29 +1,10 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import Loading from '../components/Loading'
+import OrganizationLogo from '../components/OrganizationLogo'
+import { organizationBackground } from '../utils/gradient'
 import { getOrganizations } from '../services/competition'
 import type { OrganizationHierarchy } from '../types/organizations'
-
-function OrganizationLogo({ name }: { name: string }) {
-    const [hasError, setHasError] = useState(false)
-
-    if (hasError) {
-        return (
-            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/5 text-xs font-semibold text-zinc-300">
-                {name.slice(0, 3).toUpperCase()}
-            </span>
-        )
-    }
-
-    return (
-        <img
-            src={`/logos/${name}.png`}
-            alt={`Logo ${name}`}
-            className="h-12 w-12 shrink-0 rounded-2xl border border-white/10 bg-black/20 object-contain p-1"
-            onError={() => setHasError(true)}
-        />
-    )
-}
 
 function sortOrganizations(input: OrganizationHierarchy[]): OrganizationHierarchy[] {
     return [...input].sort((a, b) => {
@@ -87,10 +68,10 @@ export default function OrganizationsPage() {
                                 key={organization.id}
                                 to={`/entidades/${organization.id}`}
                                 className="group rounded-3xl border border-white/10 bg-black/40 p-5 shadow-xl shadow-black/25 backdrop-blur transition hover:border-red-400/40 hover:bg-black/55"
-                                style={{ backgroundImage: `${organization.gradient}, radial-gradient(circle at top right, rgb(255 255 255 / 0.08), transparent 55%)` }}
+                                style={{ backgroundImage: organizationBackground(organization.gradient) }}
                             >
                                 <header className="flex items-center gap-3 border-b border-white/10 pb-4">
-                                <OrganizationLogo name={organization.name} />
+                                <OrganizationLogo organization={organization} className="h-12 w-12" />
                                 <div>
                                     <h2 className="text-lg font-semibold text-zinc-100 transition group-hover:text-red-300">{organization.name}</h2>
                                     <p className="text-xs text-zinc-500">{organization.description || 'Sem descrição cadastrada.'}</p>

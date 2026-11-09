@@ -7,7 +7,7 @@
 - [x] Melhorar página da gestão
 - [ ] Gerenciar Org:
 - [x] Gerenciar Membros (secre)
-- [ ] Nome, Gradiente, Logo... (mkt)
+- [x] Nome, Gradiente, Logo... (mkt)
 - [ ] Gerenciar Times, e DMs (DM tbm pode alterar DM) (esportes)
 - [ ] Página "Quem Somos" com a presidência e as 9 diretorias
 - [x] Página da Diretoria Interna (presidentes e vices das AAAs)

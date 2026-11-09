@@ -16,13 +16,40 @@ export interface OrganizationMember {
   director_area: string | null;
 }
 
-export interface OrganizationHierarchy {
+/** Visual identity and public info of an organization (everything but its members). */
+export interface OrganizationIdentity {
   id: number;
   name: string;
   description: string | null;
   gradient: string;
+  logo_url: string | null;
+  banner_url: string | null;
+  accent_color: string | null;
+  about: string | null;
+  instagram: string | null;
+  website: string | null;
+  contact_email: string | null;
+  store_url: string | null;
+}
+
+export interface OrganizationHierarchy extends OrganizationIdentity {
   members: OrganizationMember[];
 }
+
+const IDENTITY_COLUMNS = [
+  "id",
+  "name",
+  "description",
+  "gradient",
+  "logo_url",
+  "banner_url",
+  "accent_color",
+  "about",
+  "instagram",
+  "website",
+  "contact_email",
+  "store_url",
+] as const;
 
 export class NotFoundError extends Error {
   name = "Not Found Error";
@@ -36,6 +63,10 @@ export class ForbiddenError extends Error {
   name = "Forbidden Error";
 }
 
+export class ConflictError extends Error {
+  name = "Conflict Error";
+}
+
 export const ORGANIZATION_ROLES: OrganizationRole[] = [
   "presidente",
   "vice",
@@ -46,26 +77,32 @@ export const ORGANIZATION_ROLES: OrganizationRole[] = [
 ];
 
 const LEU_NAME = "LEU";
-const SECRETARIA_AREA = "secretaria";
 
-/** Presidents and secretaries (diretores da Secretaria) manage their organization's members. */
-function isMemberManagerRole(role: string, directorArea: string | null): boolean {
-  if (role === "presidente") return true;
+type Position = { role: string; director_area: string | null };
+
+function isDirectorOf(position: Position, area: string): boolean {
   return (
-    role === "diretor" &&
-    (directorArea ?? "").trim().toLowerCase() === SECRETARIA_AREA
+    position.role === "diretor" &&
+    (position.director_area ?? "").trim().toLowerCase() === area
   );
 }
 
-/**
- * Whether `email` can manage the members of organization `organizationId`:
- * presidents and secretaries of that organization, or of the LEU (which manages all).
- */
-export async function canManageMembers(
+/** Presidents and secretaries (diretores da Secretaria) manage members. */
+function isMemberManager(position: Position): boolean {
+  return position.role === "presidente" || isDirectorOf(position, "secretaria");
+}
+
+/** Presidents and marketing directors manage the visual identity. */
+function isIdentityManager(position: Position): boolean {
+  return position.role === "presidente" || isDirectorOf(position, "marketing");
+}
+
+/** Positions of `email` in organization `organizationId` and in the LEU (which manages all). */
+async function relevantPositions(
   email: string,
   organizationId: number,
-): Promise<boolean> {
-  const rows = await db("organization_users as ou")
+): Promise<Position[]> {
+  return db("organization_users as ou")
     .join("organizations as o", "o.id", "ou.organization_id")
     .where("ou.user_email", email)
     .andWhere((query) =>
@@ -73,22 +110,163 @@ export async function canManageMembers(
         .where("ou.organization_id", organizationId)
         .orWhere("o.name", LEU_NAME),
     )
-    .select<{ role: string; director_area: string | null }[]>(
-      "ou.role",
-      "ou.director_area",
-    );
+    .select<Position[]>("ou.role", "ou.director_area");
+}
 
-  return rows.some((row) => isMemberManagerRole(row.role, row.director_area));
+export interface OrganizationPermissions {
+  canManageMembers: boolean;
+  canManageIdentity: boolean;
+}
+
+export async function getOrganizationPermissions(
+  email: string,
+  organizationId: number,
+): Promise<OrganizationPermissions> {
+  const positions = await relevantPositions(email, organizationId);
+  return {
+    canManageMembers: positions.some(isMemberManager),
+    canManageIdentity: positions.some(isIdentityManager),
+  };
+}
+
+async function assertOrganizationExists(organizationId: number): Promise<void> {
+  const exists = await db("organizations").where({ id: organizationId }).first();
+  if (!exists) throw new NotFoundError(`Organization ${organizationId} not found`);
 }
 
 export async function assertCanManageMembers(
   email: string,
   organizationId: number,
 ): Promise<void> {
-  const exists = await db("organizations").where({ id: organizationId }).first();
-  if (!exists) throw new NotFoundError(`Organization ${organizationId} not found`);
-  if (!(await canManageMembers(email, organizationId)))
+  await assertOrganizationExists(organizationId);
+  if (!(await getOrganizationPermissions(email, organizationId)).canManageMembers)
     throw new ForbiddenError("Only presidents and secretaries can manage members");
+}
+
+export async function assertCanManageIdentity(
+  email: string,
+  organizationId: number,
+): Promise<void> {
+  await assertOrganizationExists(organizationId);
+  if (!(await getOrganizationPermissions(email, organizationId)).canManageIdentity)
+    throw new ForbiddenError("Only presidents and marketing directors can manage the visual identity");
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+/** Only the shape the identity editor produces, since it is injected into inline styles. */
+const GRADIENT = /^linear-gradient\(\d{1,3}deg, #[0-9a-f]{6} \d{1,3}%, #[0-9a-f]{6} \d{1,3}%\)$/i;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INSTAGRAM_HANDLE = /^[a-z0-9._]{1,30}$/i;
+
+function optionalText(value: unknown, field: string, maxLength: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") throw new ValidationError(`${field} must be a string`);
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength)
+    throw new ValidationError(`${field} must have at most ${maxLength} characters`);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function optionalUrl(value: unknown, field: string): string | null {
+  const text = optionalText(value, field, 500);
+  if (text === null) return null;
+  const withScheme = /^https?:\/\//i.test(text) ? text : `https://${text}`;
+  try {
+    const url = new URL(withScheme);
+    if (!url.hostname.includes(".")) throw new Error();
+    return url.toString();
+  } catch {
+    throw new ValidationError(`${field} must be a valid URL`);
+  }
+}
+
+/** Accepts "@handle", "handle" or an instagram.com URL; stores the bare handle. */
+function instagramHandle(value: unknown): string | null {
+  const text = optionalText(value, "instagram", 200);
+  if (text === null) return null;
+  const fromUrl = text.match(/instagram\.com\/([^/?#]+)/i)?.[1];
+  const handle = (fromUrl ?? text).replace(/^@/, "");
+  if (!INSTAGRAM_HANDLE.test(handle))
+    throw new ValidationError("instagram must be a valid handle");
+  return handle;
+}
+
+export type IdentityInput = Partial<Record<keyof OrganizationIdentity, unknown>>;
+
+/** Updates the text fields of the identity. Only the fields present in `input` change. */
+export async function updateOrganizationIdentity(
+  organizationId: number,
+  input: IdentityInput,
+): Promise<OrganizationHierarchy> {
+  const current = await db("organizations").where({ id: organizationId }).first();
+  if (!current) throw new NotFoundError(`Organization ${organizationId} not found`);
+
+  const changes: Partial<OrganizationIdentity> = {};
+
+  if (input.name !== undefined) {
+    const name = optionalText(input.name, "name", 30);
+    if (name === null) throw new ValidationError("name is required");
+    if (name !== current.name && current.name === LEU_NAME)
+      throw new ValidationError("The LEU name cannot be changed");
+    changes.name = name;
+  }
+  if (input.description !== undefined)
+    changes.description = optionalText(input.description, "description", 200);
+  if (input.about !== undefined)
+    changes.about = optionalText(input.about, "about", 2000);
+  if (input.gradient !== undefined) {
+    if (typeof input.gradient !== "string" || !GRADIENT.test(input.gradient.trim()))
+      throw new ValidationError("Invalid gradient");
+    changes.gradient = input.gradient.trim();
+  }
+  if (input.accent_color !== undefined) {
+    const color = optionalText(input.accent_color, "accent_color", 7);
+    if (color !== null && !HEX_COLOR.test(color))
+      throw new ValidationError("accent_color must be a #RRGGBB color");
+    changes.accent_color = color?.toLowerCase() ?? null;
+  }
+  if (input.instagram !== undefined) changes.instagram = instagramHandle(input.instagram);
+  if (input.website !== undefined) changes.website = optionalUrl(input.website, "website");
+  if (input.store_url !== undefined) changes.store_url = optionalUrl(input.store_url, "store_url");
+  if (input.contact_email !== undefined) {
+    const email = optionalText(input.contact_email, "contact_email", 200);
+    if (email !== null && !EMAIL.test(email))
+      throw new ValidationError("contact_email must be a valid e-mail");
+    changes.contact_email = email;
+  }
+
+  if (Object.keys(changes).length === 0)
+    throw new ValidationError("Nothing to change");
+
+  if (changes.name && changes.name !== current.name) {
+    const taken = await db("organizations")
+      .whereRaw("LOWER(name) = ?", [changes.name.toLowerCase()])
+      .whereNot({ id: organizationId })
+      .first();
+    if (taken) throw new ConflictError("Another organization already uses this name");
+  }
+
+  await db("organizations").where({ id: organizationId }).update(changes);
+  return getOrganizationHierarchy(organizationId);
+}
+
+export type IdentityImage = "logo" | "banner";
+
+/** Sets (or clears, with null) the logo or banner URL; returns the previous URL. */
+export async function setOrganizationImage(
+  organizationId: number,
+  kind: IdentityImage,
+  url: string | null,
+): Promise<{ previous: string | null; organization: OrganizationHierarchy }> {
+  const column = kind === "logo" ? "logo_url" : "banner_url";
+  const current = await db("organizations").where({ id: organizationId }).first();
+  if (!current) throw new NotFoundError(`Organization ${organizationId} not found`);
+
+  await db("organizations").where({ id: organizationId }).update({ [column]: url });
+  return {
+    previous: current[column],
+    organization: await getOrganizationHierarchy(organizationId),
+  };
 }
 
 export interface UserSearchResult {
@@ -224,13 +402,6 @@ export async function updateOrganizationMembers(
   return getOrganizationHierarchy(organizationId);
 }
 
-interface OrganizationRow {
-  id: number;
-  name: string;
-  description: string | null;
-  gradient: string;
-}
-
 interface OrganizationMemberRow {
   organization_id: number;
   user_email: string;
@@ -254,8 +425,8 @@ export async function listOrganizationsHierarchy(): Promise<
   OrganizationHierarchy[]
 > {
   const organizations = await db("organizations")
-    .select<OrganizationRow[]>("id", "name", "description", "gradient")
-    .orderByRaw("CASE WHEN name = ? THEN 0 ELSE 1 END", ["LEU"])
+    .select<OrganizationIdentity[]>(...IDENTITY_COLUMNS)
+    .orderByRaw("CASE WHEN name = ? THEN 0 ELSE 1 END", [LEU_NAME])
     .orderBy("name", "asc");
 
   const members = await db("organization_users as ou")

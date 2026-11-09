@@ -20,6 +20,8 @@ const adminLinks = [{ to: '/admin', label: 'Admin' }]
 interface ManageOrganizationItem {
     id: number
     name: string
+    members: boolean
+    identity: boolean
 }
 
 function profileInitials(name: string): string {
@@ -31,16 +33,31 @@ function profileInitials(name: string): string {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
-/** Mirrors the backend rule: presidents and secretaries (diretores da Secretaria) manage members. */
+function isDirectorOf(member: OrganizationMember, area: string): boolean {
+    return member.role === 'diretor' && (member.director_area ?? '').trim().toLowerCase() === area
+}
+
+/** Mirrors the backend rules: presidents and secretaries manage members; presidents and marketing manage the identity. */
 function canManageMembers(member: OrganizationMember): boolean {
-    return member.role === 'presidente'
-        || (member.role === 'diretor' && (member.director_area ?? '').trim().toLowerCase() === 'secretaria')
+    return member.role === 'presidente' || isDirectorOf(member, 'secretaria')
+}
+
+function canManageIdentity(member: OrganizationMember): boolean {
+    return member.role === 'presidente' || isDirectorOf(member, 'marketing')
 }
 
 function organizationsToManage(organizations: OrganizationHierarchy[], userEmail: string): ManageOrganizationItem[] {
     return organizations
-        .filter((organization) => organization.members.some((member) => member.email === userEmail && canManageMembers(member)))
-        .map((organization) => ({ id: organization.id, name: organization.name }))
+        .map((organization) => {
+            const positions = organization.members.filter((member) => member.email === userEmail)
+            return {
+                id: organization.id,
+                name: organization.name,
+                members: positions.some(canManageMembers),
+                identity: positions.some(canManageIdentity),
+            }
+        })
+        .filter((item) => item.members || item.identity)
 }
 
 export default function AppLayout() {
@@ -182,15 +199,26 @@ export default function AppLayout() {
                                     Gerenciar Perfil
                                 </Link>
 
-                                {manageOrgs.map((organization) => (
-                                    <Link
-                                        key={organization.id}
-                                        to={`/entidades/${organization.id}/membros`}
-                                        className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
-                                    >
-                                        {organization.name}: Gerenciar Membros
-                                    </Link>
-                                ))}
+                                {manageOrgs.flatMap((organization) => [
+                                    organization.members ? (
+                                        <Link
+                                            key={`${organization.id}-members`}
+                                            to={`/entidades/${organization.id}/membros`}
+                                            className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                        >
+                                            {organization.name}: Gerenciar Membros
+                                        </Link>
+                                    ) : null,
+                                    organization.identity ? (
+                                        <Link
+                                            key={`${organization.id}-identity`}
+                                            to={`/entidades/${organization.id}/identidade`}
+                                            className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                        >
+                                            {organization.name}: Gerenciar IV
+                                        </Link>
+                                    ) : null,
+                                ])}
                             </div>
                         ) : null}
                     </div>
