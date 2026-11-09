@@ -8,29 +8,30 @@
 - [ ] Gerenciar Org:
 - [x] Gerenciar Membros (secre)
 - [x] Nome, Gradiente, Logo... (mkt)
-- [ ] Gerenciar Times, e DMs (DM tbm pode alterar DM) (esportes)
-- [ ] Página "Quem Somos" com a presidência e as 9 diretorias
+- [x] Gerenciar Times, e DMs (DM tbm pode alterar DM) (esportes)
+- [x] Página "Quem Somos" com a presidência e as 9 diretorias
 - [x] Página da Diretoria Interna (presidentes e vices das AAAs)
 - [ ] Histórico de gestões anteriores
-- [ ] Passagem de gestão (transferir cargos e permissões para a nova gestão)
+- [x] Passagem de gestão (transferir cargos e permissões para a nova gestão)
 - [ ] Vincular aluno à sua AAA (curso)
-- [ ] Permissões por diretoria (cada diretoria edita só o que é dela)
+- [x] Permissões por diretoria (cada diretoria edita só o que é dela)
 
 ### Perfil
 
-- [ ] Times em que o aluno joga (atual e histórico)
-- [ ] Premiações no perfil (ex: Ouro Vôlei Masc Copa Bixo 2025, Atleta Destaque Vôlei Masc 2026)
+- [x] Times em que o aluno joga
+- [ ] Histórico de times em que jogou
+- [x] Premiações no perfil (ex: Ouro Vôlei Masc Copa Bixo 2025, Atleta Destaque Vôlei Masc 2026)
 - [ ] Histórico de participação nas copas (modalidades e resultados)
 - [ ] Selo de membro do ClubLEU
-- [ ] Cargos ocupados (gestão da LEU, AAA, DM)
+- [x] Cargos ocupados (gestão da LEU, AAA, DM)
 - [ ] Foto e redes sociais
 
 ### Times
 
-- [ ] Cargo de DM
+- [x] Cargo de DM
 - [ ] Horário de Treinos
 - [ ] Página pública de cada time (elenco, DMs, treinos, conquistas)
-- [ ] Elenco do time (DM adiciona/remove atletas)
+- [x] Elenco do time (DM adiciona/remove atletas)
 - [ ] Formulário de interesse para entrar no time ("quero treinar")
 - [ ] Galeria de títulos e troféus do time
 - [ ] Calendário de jogos e campeonatos do time

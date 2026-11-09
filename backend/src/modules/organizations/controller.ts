@@ -97,6 +97,11 @@ function isIdentityManager(position: Position): boolean {
   return position.role === "presidente" || isDirectorOf(position, "marketing");
 }
 
+/** Presidents and sports directors manage teams, DMs and awards. */
+function isSportsManager(position: Position): boolean {
+  return position.role === "presidente" || isDirectorOf(position, "esportes");
+}
+
 /** Positions of `email` in organization `organizationId` and in the LEU (which manages all). */
 async function relevantPositions(
   email: string,
@@ -116,6 +121,8 @@ async function relevantPositions(
 export interface OrganizationPermissions {
   canManageMembers: boolean;
   canManageIdentity: boolean;
+  /** Teams, rosters, DMs and awards of the organization. */
+  canManageSports: boolean;
 }
 
 export async function getOrganizationPermissions(
@@ -126,7 +133,17 @@ export async function getOrganizationPermissions(
   return {
     canManageMembers: positions.some(isMemberManager),
     canManageIdentity: positions.some(isIdentityManager),
+    canManageSports: positions.some(isSportsManager),
   };
+}
+
+export async function assertCanManageSports(
+  email: string,
+  organizationId: number,
+): Promise<void> {
+  await assertOrganizationExists(organizationId);
+  if (!(await getOrganizationPermissions(email, organizationId)).canManageSports)
+    throw new ForbiddenError("Only presidents and sports directors can manage teams and awards");
 }
 
 async function assertOrganizationExists(organizationId: number): Promise<void> {
@@ -477,4 +494,21 @@ export async function getOrganizationHierarchy(
   const organization = organizations.find((row) => row.id === id);
   if (!organization) throw new NotFoundError(`Organization ${id} not found`);
   return organization;
+}
+
+/** Just enough of an organization to show its name, logo and colors next to a team. */
+export interface OrganizationSummary {
+  id: number;
+  name: string;
+  logo_url: string | null;
+  gradient: string;
+  accent_color: string | null;
+}
+
+export async function organizationSummaries(ids: number[]): Promise<Map<number, OrganizationSummary>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db("organizations")
+    .whereIn("id", [...new Set(ids)])
+    .select<OrganizationSummary[]>("id", "name", "logo_url", "gradient", "accent_color");
+  return new Map(rows.map((row) => [row.id, row]));
 }

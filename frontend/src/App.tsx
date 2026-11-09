@@ -12,6 +12,9 @@ import OrganizationsPage from './pages/OrganizationsPage'
 import OrganizationDetailPage from './pages/OrganizationDetailPage'
 import OrganizationMembersPage from './pages/OrganizationMembersPage'
 import OrganizationIdentityPage from './pages/OrganizationIdentityPage'
+import OrganizationSportsPage from './pages/OrganizationSportsPage'
+import SportsTeamPage from './pages/SportsTeamPage'
+import PublicProfilePage from './pages/PublicProfilePage'
 import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
@@ -27,6 +30,9 @@ export default function App() {
         <Route path="/entidades/:id" element={<OrganizationDetailPage />} />
         <Route path="/entidades/:id/membros" element={<OrganizationMembersPage />} />
         <Route path="/entidades/:id/identidade" element={<OrganizationIdentityPage />} />
+        <Route path="/entidades/:id/esportes" element={<OrganizationSportsPage />} />
+        <Route path="/times/:id" element={<SportsTeamPage />} />
+        <Route path="/pessoas/:email" element={<PublicProfilePage />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
         <Route path="/tabela" element={<SchedulePage />} />

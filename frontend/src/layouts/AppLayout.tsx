@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { getDisplayName, getLoggedUser, getToken } from '../services/auth'
 import { getOrganizations } from '../services/competition'
 import type { OrganizationHierarchy, OrganizationMember } from '../types/organizations'
+import type { SportsTeam } from '../types/sports'
+import { getSportsTeams } from '../services/sports'
 
 const publicLinks = [
     { to: '/home', label: 'Home' },
@@ -22,6 +24,7 @@ interface ManageOrganizationItem {
     name: string
     members: boolean
     identity: boolean
+    sports: boolean
 }
 
 function profileInitials(name: string): string {
@@ -46,6 +49,11 @@ function canManageIdentity(member: OrganizationMember): boolean {
     return member.role === 'presidente' || isDirectorOf(member, 'marketing')
 }
 
+/** Presidents and sports directors manage teams, DMs and awards. */
+function canManageSports(member: OrganizationMember): boolean {
+    return member.role === 'presidente' || isDirectorOf(member, 'esportes')
+}
+
 function organizationsToManage(organizations: OrganizationHierarchy[], userEmail: string): ManageOrganizationItem[] {
     return organizations
         .map((organization) => {
@@ -55,9 +63,10 @@ function organizationsToManage(organizations: OrganizationHierarchy[], userEmail
                 name: organization.name,
                 members: positions.some(canManageMembers),
                 identity: positions.some(canManageIdentity),
+                sports: positions.some(canManageSports),
             }
         })
-        .filter((item) => item.members || item.identity)
+        .filter((item) => item.members || item.identity || item.sports)
 }
 
 export default function AppLayout() {
@@ -71,11 +80,14 @@ export default function AppLayout() {
 
     const [menuOpen, setMenuOpen] = useState(false)
     const [manageOrgs, setManageOrgs] = useState<ManageOrganizationItem[]>([])
+    /** Teams the user is a DM of, to edit their rosters. */
+    const [dmTeams, setDmTeams] = useState<SportsTeam[]>([])
     const menuRef = useRef<HTMLDivElement | null>(null)
 
     useEffect(() => {
         if (!user) {
             setManageOrgs([])
+            setDmTeams([])
             return
         }
 
@@ -89,6 +101,15 @@ export default function AppLayout() {
             .catch(() => {
                 if (!cancelled)
                     setManageOrgs([])
+            })
+        getSportsTeams()
+            .then((teams) => {
+                if (!cancelled)
+                    setDmTeams(teams.filter((team) => team.members.some((member) => member.email === user.email && member.is_dm)))
+            })
+            .catch(() => {
+                if (!cancelled)
+                    setDmTeams([])
             })
 
         return () => {
@@ -198,6 +219,12 @@ export default function AppLayout() {
                                 >
                                     Gerenciar Perfil
                                 </Link>
+                                <Link
+                                    to={`/pessoas/${encodeURIComponent(user.email)}`}
+                                    className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                >
+                                    Ver Perfil Público
+                                </Link>
 
                                 {manageOrgs.flatMap((organization) => [
                                     organization.members ? (
@@ -218,7 +245,26 @@ export default function AppLayout() {
                                             {organization.name}: Gerenciar IV
                                         </Link>
                                     ) : null,
+                                    organization.sports ? (
+                                        <Link
+                                            key={`${organization.id}-sports`}
+                                            to={`/entidades/${organization.id}/esportes`}
+                                            className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                        >
+                                            {organization.name}: Gerenciar Esportes
+                                        </Link>
+                                    ) : null,
                                 ])}
+
+                                {dmTeams.map((team) => (
+                                    <Link
+                                        key={`dm-${team.id}`}
+                                        to={`/times/${team.id}`}
+                                        className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
+                                    >
+                                        DM: {team.name} ({team.organization.name})
+                                    </Link>
+                                ))}
                             </div>
                         ) : null}
                     </div>

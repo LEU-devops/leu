@@ -1,6 +1,10 @@
-import { ChangeEvent, useEffect, useId, useState } from 'react'
+import { type ChangeEvent, useEffect, useId, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getDisplayName, getLoggedUser, getMyProfile, type UserProfile, updateMyProfile, uploadMyProfilePhoto } from '../services/auth'
 import Loading from '../components/Loading'
+import ProfileBadges from '../components/badges/ProfileBadges'
+import { getPublicProfile } from '../services/sports'
+import type { PublicProfile } from '../types/sports'
 
 export default function ProfilePage() {
     const user = getLoggedUser()
@@ -14,6 +18,7 @@ export default function ProfilePage() {
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState<string | null>(null)
     const photoInputId = useId()
+    const [badgesProfile, setBadgesProfile] = useState<PublicProfile | null>(null)
 
     useEffect(() => {
         if (!user) {
@@ -22,6 +27,9 @@ export default function ProfilePage() {
         }
 
         let cancelled = false
+        getPublicProfile(user.email)
+            .then((data) => !cancelled && setBadgesProfile(data))
+            .catch(() => undefined)
         getMyProfile()
             .then((data) => {
                 if (cancelled)
@@ -200,6 +208,18 @@ export default function ProfilePage() {
                         {saving ? 'Salvando...' : 'Salvar alterações'}
                     </button>
                 </form>
+            ) : null}
+
+            {!loading && user && badgesProfile ? (
+                <section className="max-w-4xl space-y-4 rounded-3xl border border-white/10 bg-black/40 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-lg font-semibold text-zinc-50">Minhas badges</h2>
+                        <Link to={`/pessoas/${encodeURIComponent(user.email)}`} className="text-sm text-zinc-400 transition hover:text-zinc-200">
+                            Ver meu perfil público →
+                        </Link>
+                    </div>
+                    <ProfileBadges profile={badgesProfile} />
+                </section>
             ) : null}
         </main>
     )

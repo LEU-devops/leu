@@ -5,17 +5,11 @@ import Loading from '../components/Loading'
 import Select from '../components/Select'
 import { getLoggedUser } from '../services/auth'
 import { getOrganizations } from '../services/competition'
-import { getOrganizationPermissions, searchUsersForOrganization, updateOrganizationMembers } from '../services/organizations'
+import { getOrganizationPermissions, updateOrganizationMembers } from '../services/organizations'
+import { UserAvatar, UserSearch } from '../components/UserSearch'
+import { ROLE_OPTIONS, roleLabel } from '../utils/roles'
 import type { MemberAddition, OrganizationHierarchy, OrganizationMember, OrganizationRole, UserSearchResult } from '../types/organizations'
 
-const ROLE_OPTIONS: { value: OrganizationRole, label: string }[] = [
-    { value: 'presidente', label: 'Presidente' },
-    { value: 'vice', label: 'Vice-presidente' },
-    { value: 'diretor', label: 'Diretor(a)' },
-    { value: 'conselheiro', label: 'Conselheiro(a)' },
-    { value: 'membro', label: 'Membro da gestão' },
-    { value: 'aluno', label: 'Aluno(a)' },
-]
 
 const ROLE_ORDER: Record<OrganizationRole, number> = { presidente: 0, vice: 1, diretor: 2, conselheiro: 3, membro: 4, aluno: 5 }
 
@@ -28,12 +22,6 @@ type Position = Pick<OrganizationMember, 'role' | 'director_area'>
 
 /** A pending addition, with the user data needed to display it. */
 type PendingAddition = MemberAddition & Pick<UserSearchResult, 'name' | 'profile_photo_url'>
-
-function roleLabel({ role, director_area }: Position): string {
-    if (role === 'diretor')
-        return director_area ? `Diretor(a) de ${director_area}` : 'Diretor(a)'
-    return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role
-}
 
 function samePosition(a: Position, b: Position): boolean {
     return a.role === b.role && (a.director_area ?? '').trim().toLowerCase() === (b.director_area ?? '').trim().toLowerCase()
@@ -51,96 +39,7 @@ function errorMessage(error: unknown): string {
     return match ? match[1] : 'Não foi possível salvar. Tente novamente.'
 }
 
-function Avatar({ name, photo }: { name: string, photo: string | null }) {
-    const [failed, setFailed] = useState(false)
-    if (photo && !failed) {
-        return (
-            <img
-                src={`${import.meta.env.VITE_API_URL}${photo}`}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/10"
-                onError={() => setFailed(true)}
-            />
-        )
-    }
-    return (
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-300 ring-1 ring-white/10">
-            {name.slice(0, 2).toUpperCase()}
-        </span>
-    )
-}
-
-function UserSearch({ organizationId, isTaken, onPick }: {
-    organizationId: number
-    isTaken: (email: string) => boolean
-    onPick: (user: UserSearchResult) => void
-}) {
-    const [query, setQuery] = useState('')
-    /** Latest results and the term they answer; while it differs from the typed term, a search is pending. */
-    const [response, setResponse] = useState<{ term: string, rows: UserSearchResult[] }>({ term: '', rows: [] })
-    const term = query.trim()
-    const searching = response.term !== term
-    const results = term.length >= 2 ? response.rows : []
-
-    useEffect(() => {
-        if (term.length < 2)
-            return
-        let cancelled = false
-        const timer = setTimeout(() => {
-            searchUsersForOrganization(organizationId, term)
-                .then((rows) => !cancelled && setResponse({ term, rows }))
-                .catch(() => !cancelled && setResponse({ term, rows: [] }))
-        }, 300)
-        return () => {
-            cancelled = true
-            clearTimeout(timer)
-        }
-    }, [organizationId, term])
-
-    return (
-        <div className="space-y-2">
-            <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por nome, apelido ou e-mail"
-                className={INPUT_CLASS}
-            />
-            {term.length >= 2 ? (
-                <ul className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-1">
-                    {searching && results.length === 0 ? <li className="px-3 py-2 text-sm text-zinc-500">Buscando...</li> : null}
-                    {!searching && results.length === 0 ? <li className="px-3 py-2 text-sm text-zinc-500">Nenhum usuário encontrado.</li> : null}
-                    {results.map((user) => {
-                        const taken = isTaken(user.email)
-                        return (
-                            <li key={user.email}>
-                                <button
-                                    type="button"
-                                    disabled={taken}
-                                    onClick={() => {
-                                        onPick(user)
-                                        setQuery('')
-                                    }}
-                                    className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                    <Avatar name={user.name} photo={user.profile_photo_url} />
-                                    <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm text-zinc-100">{user.full_name || user.name}</span>
-                                        <span className="block truncate text-xs text-zinc-500">{user.email}</span>
-                                    </span>
-                                    {taken ? <span className="text-xs text-zinc-500">Já é membro</span> : null}
-                                </button>
-                            </li>
-                        )
-                    })}
-                </ul>
-            ) : null}
-        </div>
-    )
-}
-
-function AddMemberForm({ organizationId, areaSuggestions, isTaken, onAdd }: {
-    organizationId: number
+function AddMemberForm({ areaSuggestions, isTaken, onAdd }: {
     areaSuggestions: string[]
     isTaken: (email: string) => boolean
     onAdd: (addition: PendingAddition) => void
@@ -172,7 +71,7 @@ function AddMemberForm({ organizationId, areaSuggestions, isTaken, onAdd }: {
 
             {user ? (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                    <Avatar name={user.name} photo={user.profile_photo_url} />
+                    <UserAvatar name={user.name} photo={user.profile_photo_url} />
                     <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-zinc-100">{user.full_name || user.name}</span>
                         <span className="block truncate text-xs text-zinc-500">{user.email}</span>
@@ -182,7 +81,7 @@ function AddMemberForm({ organizationId, areaSuggestions, isTaken, onAdd }: {
                     </button>
                 </div>
             ) : (
-                <UserSearch organizationId={organizationId} isTaken={isTaken} onPick={setUser} />
+                <UserSearch isTaken={isTaken} onPick={setUser} />
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -470,7 +369,7 @@ export default function OrganizationMembersPage() {
                         </p>
                     </header>
 
-                    <AddMemberForm organizationId={organization.id} areaSuggestions={areaSuggestions} isTaken={isTaken} onAdd={(addition) => {
+                    <AddMemberForm areaSuggestions={areaSuggestions} isTaken={isTaken} onAdd={(addition) => {
                         setSavedMessage(null)
                         setAdded((list) => [...list, addition])
                     }} />
@@ -481,7 +380,7 @@ export default function OrganizationMembersPage() {
                             <ul className="space-y-2">
                                 {added.map((addition) => (
                                     <li key={addition.email} className="flex items-center gap-3 rounded-2xl border border-emerald-800/50 bg-emerald-950/20 px-4 py-2">
-                                        <Avatar name={addition.name} photo={addition.profile_photo_url} />
+                                        <UserAvatar name={addition.name} photo={addition.profile_photo_url} />
                                         <span className="min-w-0 flex-1">
                                             <span className="block truncate text-sm text-zinc-100">{addition.name}</span>
                                             <span className="block truncate text-xs text-zinc-400">{roleLabel(addition)}</span>
@@ -514,7 +413,7 @@ export default function OrganizationMembersPage() {
                                                 isRemoved ? 'border-red-900/60 bg-red-950/20' : 'border-white/10 bg-white/[0.03]'
                                             }`}
                                         >
-                                            <Avatar name={member.name} photo={member.profile_photo_url} />
+                                            <UserAvatar name={member.name} photo={member.profile_photo_url} />
                                             <span className={`min-w-0 flex-1 ${isRemoved ? 'opacity-50' : ''}`}>
                                                 <span className={`block truncate text-sm text-zinc-100 ${isRemoved ? 'line-through' : ''}`}>
                                                     {member.name}

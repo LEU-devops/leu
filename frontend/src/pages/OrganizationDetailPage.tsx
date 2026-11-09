@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import { getOrganizations } from '../services/competition'
 import { getOrganizationPermissions } from '../services/organizations'
+import { getSportsTeams } from '../services/sports'
+import type { SportsTeam } from '../types/sports'
 import OrganizationHeader from '../components/OrganizationHeader'
 import { organizationBackground } from '../utils/gradient'
 import type { OrganizationPermissions } from '../types/organizations'
@@ -31,7 +33,8 @@ function MemberAvatar({ member, size, caption }: { member: OrganizationMember, s
     const showPhoto = Boolean(member.profile_photo_url) && !photoError
 
     return (
-        <li className="group flex flex-col items-center gap-2">
+        <li>
+            <Link to={`/pessoas/${encodeURIComponent(member.email)}`} className="group flex flex-col items-center gap-2">
             <div
                 className={`relative ${styles.box} overflow-hidden rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 shadow-lg shadow-black/40 ring-2 ring-white/10 transition duration-300 group-hover:-translate-y-1 group-hover:ring-white/30`}
             >
@@ -61,6 +64,7 @@ function MemberAvatar({ member, size, caption }: { member: OrganizationMember, s
             {caption ? (
                 <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400">{caption}</span>
             ) : null}
+            </Link>
         </li>
     )
 }
@@ -92,7 +96,8 @@ export default function OrganizationDetailPage() {
     const [associations, setAssociations] = useState<OrganizationHierarchy[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [permissions, setPermissions] = useState<OrganizationPermissions>({ canManageMembers: false, canManageIdentity: false })
+    const [teams, setTeams] = useState<SportsTeam[]>([])
+    const [permissions, setPermissions] = useState<OrganizationPermissions>({ canManageMembers: false, canManageIdentity: false, canManageSports: false })
 
     useEffect(() => {
         if (!Number.isInteger(id) || id <= 0)
@@ -100,6 +105,9 @@ export default function OrganizationDetailPage() {
         let cancelled = false
         getOrganizationPermissions(id)
             .then((result) => !cancelled && setPermissions(result))
+            .catch(() => undefined)
+        getSportsTeams(id)
+            .then((result) => !cancelled && setTeams(result))
             .catch(() => undefined)
         return () => {
             cancelled = true
@@ -200,6 +208,11 @@ export default function OrganizationDetailPage() {
                                 {permissions.canManageMembers ? (
                                     <Link to={`/entidades/${organization.id}/membros`} className={MANAGE_BUTTON}>
                                         Gerenciar membros
+                                    </Link>
+                                ) : null}
+                                {permissions.canManageSports ? (
+                                    <Link to={`/entidades/${organization.id}/esportes`} className={MANAGE_BUTTON}>
+                                        Gerenciar esportes
                                     </Link>
                                 ) : null}
                             </>
@@ -320,6 +333,36 @@ export default function OrganizationDetailPage() {
                             </ul>
                         ) : (
                             <EmptyState text="Nenhum membro de gestão cadastrado." />
+                        )}
+                    </section>
+
+                    <section className="space-y-6">
+                        <SectionHeading accent={organization.accent_color} title="Times" count={teams.length} />
+                        {teams.length > 0 ? (
+                            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {teams.map((team) => {
+                                    const dms = team.members.filter((member) => member.is_dm)
+                                    return (
+                                        <li key={team.id}>
+                                            <Link
+                                                to={`/times/${team.id}`}
+                                                className="block rounded-3xl border border-white/10 bg-black/40 p-5 shadow-xl shadow-black/25 transition hover:border-white/25"
+                                                style={{ backgroundImage: organizationBackground(organization.gradient) }}
+                                            >
+                                                <p className="text-lg font-semibold text-zinc-100">{team.name}</p>
+                                                <p className="mt-1 text-xs text-zinc-400">
+                                                    {team.members.length} {team.members.length === 1 ? 'integrante' : 'integrantes'}
+                                                </p>
+                                                <p className="mt-3 truncate text-xs text-zinc-400">
+                                                    DM: <span className="text-zinc-200">{dms.length > 0 ? dms.map((member) => member.name).join(', ') : 'Não definido'}</span>
+                                                </p>
+                                            </Link>
+                                        </li>
+                                    )
+                                })}
+                            </ul>
+                        ) : (
+                            <EmptyState text="Nenhum time cadastrado." />
                         )}
                     </section>
                 </div>

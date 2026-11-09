@@ -36,6 +36,8 @@ export interface OrganizationHierarchy extends OrganizationIdentity {
 export interface OrganizationPermissions {
   canManageMembers: boolean;
   canManageIdentity: boolean;
+  /** Teams, rosters, DMs and awards. */
+  canManageSports: boolean;
 }
 
 /** Editable text fields of the identity (images are uploaded separately). */

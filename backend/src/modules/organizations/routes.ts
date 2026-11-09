@@ -14,7 +14,6 @@ import {
     updateOrganizationIdentity,
     listOrganizationsHierarchy,
     NotFoundError,
-    searchUsers,
     updateOrganizationMembers,
     ValidationError,
 } from "./controller";
@@ -106,13 +105,6 @@ router.delete("/:id/images/:kind", authMiddleware, async (req: Request, res: Res
     const { previous, organization } = await setOrganizationImage(id, kind, null);
     await deleteUpload(previous);
     res.json(organization);
-});
-
-/** User search to add members; only for those who can manage this organization. */
-router.get("/:id/user-search", authMiddleware, async (req: Request, res: Response) => {
-    const id = parseId(req.params.id);
-    await assertCanManageMembers(req.user!.email, id);
-    res.json(await searchUsers(String(req.query.q ?? "")));
 });
 
 /** Batch of member changes: `{ add: [{ email, role, director_area }], remove: [email] }`. */

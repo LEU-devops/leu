@@ -2,7 +2,7 @@ import type { IdentityChange, IdentityImage, MembersChange, OrganizationHierarch
 import { request } from './api'
 import { getToken } from './auth'
 
-const NO_PERMISSIONS: OrganizationPermissions = { canManageMembers: false, canManageIdentity: false }
+const NO_PERMISSIONS: OrganizationPermissions = { canManageMembers: false, canManageIdentity: false, canManageSports: false }
 
 /** What the logged-in user can manage in this organization (nothing when logged out). */
 export async function getOrganizationPermissions(id: number): Promise<OrganizationPermissions> {
@@ -11,8 +11,9 @@ export async function getOrganizationPermissions(id: number): Promise<Organizati
     return request(`/organizations/${id}/permissions`)
 }
 
-export function searchUsersForOrganization(id: number, query: string): Promise<UserSearchResult[]> {
-    return request(`/organizations/${id}/user-search?q=${encodeURIComponent(query)}`)
+/** Any user by name, nickname or e-mail (logged-in only). */
+export function searchUsers(query: string): Promise<UserSearchResult[]> {
+    return request(`/users/search?q=${encodeURIComponent(query)}`)
 }
 
 export function updateOrganizationMembers(id: number, change: MembersChange): Promise<OrganizationHierarchy> {
