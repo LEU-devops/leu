@@ -6,7 +6,7 @@
 
 - [x] Melhorar página da gestão
 - [ ] Gerenciar Org:
-- [ ] Gerenciar Membros (presi)
+- [x] Gerenciar Membros (secre)
 - [ ] Nome, Gradiente, Logo... (mkt)
 - [ ] Gerenciar Times, e DMs (DM tbm pode alterar DM) (esportes)
 - [ ] Página "Quem Somos" com a presidência e as 9 diretorias

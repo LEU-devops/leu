@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getDisplayName, getLoggedUser, getToken } from '../services/auth'
 import { getOrganizations } from '../services/competition'
-import type { OrganizationHierarchy } from '../types/organizations'
+import type { OrganizationHierarchy, OrganizationMember } from '../types/organizations'
 
 const publicLinks = [
     { to: '/home', label: 'Home' },
@@ -31,9 +31,15 @@ function profileInitials(name: string): string {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
 }
 
+/** Mirrors the backend rule: presidents and secretaries (diretores da Secretaria) manage members. */
+function canManageMembers(member: OrganizationMember): boolean {
+    return member.role === 'presidente'
+        || (member.role === 'diretor' && (member.director_area ?? '').trim().toLowerCase() === 'secretaria')
+}
+
 function organizationsToManage(organizations: OrganizationHierarchy[], userEmail: string): ManageOrganizationItem[] {
     return organizations
-        .filter((organization) => organization.members.some((member) => member.email === userEmail && (member.role === 'presidente' || member.role === 'vice')))
+        .filter((organization) => organization.members.some((member) => member.email === userEmail && canManageMembers(member)))
         .map((organization) => ({ id: organization.id, name: organization.name }))
 }
 
@@ -179,10 +185,10 @@ export default function AppLayout() {
                                 {manageOrgs.map((organization) => (
                                     <Link
                                         key={organization.id}
-                                        to={`/entidades/${organization.id}`}
+                                        to={`/entidades/${organization.id}/membros`}
                                         className="block rounded-xl px-3 py-2 text-sm text-zinc-200 transition hover:bg-white/10"
                                     >
-                                        Gerenciar {organization.name}
+                                        {organization.name}: Gerenciar Membros
                                     </Link>
                                 ))}
                             </div>

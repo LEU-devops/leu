@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import { getOrganizations } from '../services/competition'
+import { canManageOrganizationMembers } from '../services/organizations'
 import type { OrganizationHierarchy, OrganizationMember } from '../types/organizations'
 
 function OrganizationLogo({ name }: { name: string }) {
@@ -104,6 +105,19 @@ export default function OrganizationDetailPage() {
     const [associations, setAssociations] = useState<OrganizationHierarchy[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [canManage, setCanManage] = useState(false)
+
+    useEffect(() => {
+        if (!Number.isInteger(id) || id <= 0)
+            return
+        let cancelled = false
+        canManageOrganizationMembers(id)
+            .then((allowed) => !cancelled && setCanManage(allowed))
+            .catch(() => !cancelled && setCanManage(false))
+        return () => {
+            cancelled = true
+        }
+    }, [id])
 
     useEffect(() => {
         if (!Number.isInteger(id) || id <= 0) {
@@ -195,6 +209,14 @@ export default function OrganizationDetailPage() {
                             <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{organization.name}</h1>
                             <p className="text-sm text-zinc-400">{organization.description || 'Sem descrição cadastrada.'}</p>
                         </div>
+                        {canManage ? (
+                            <Link
+                                to={`/entidades/${organization.id}/membros`}
+                                className="ml-auto shrink-0 rounded-xl border border-white/15 bg-black/30 px-4 py-2 text-sm font-medium text-zinc-100 transition hover:bg-white/10"
+                            >
+                                Gerenciar membros
+                            </Link>
+                        ) : null}
                     </header>
                 ) : null}
             </div>

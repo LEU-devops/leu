@@ -10,6 +10,7 @@ import StandingsPage from './pages/StandingsPage'
 import EventsPage from './pages/EventsPage'
 import OrganizationsPage from './pages/OrganizationsPage'
 import OrganizationDetailPage from './pages/OrganizationDetailPage'
+import OrganizationMembersPage from './pages/OrganizationMembersPage'
 import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/home" element={<HomePage />} />
         <Route path="/entidades" element={<OrganizationsPage />} />
         <Route path="/entidades/:id" element={<OrganizationDetailPage />} />
+        <Route path="/entidades/:id/membros" element={<OrganizationMembersPage />} />
         <Route path="/perfil" element={<ProfilePage />} />
         <Route path="/chaveamentos/:code?" element={<BracketsPage />} />
         <Route path="/tabela" element={<SchedulePage />} />
