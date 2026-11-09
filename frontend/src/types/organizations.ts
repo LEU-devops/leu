@@ -1,6 +1,7 @@
 export type OrganizationRole =
   | "aluno"
   | "membro"
+  | "conselheiro"
   | "diretor"
   | "presidente"
   | "vice";

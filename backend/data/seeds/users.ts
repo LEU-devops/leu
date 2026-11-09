@@ -397,6 +397,18 @@ export async function seed(knex: Knex): Promise<void> {
         role: "aluno",
         director_area: null,
       },
+      {
+        organization_id: 1,
+        user_email: "user10@example.com",
+        role: "conselheiro",
+        director_area: null,
+      },
+      {
+        organization_id: 1,
+        user_email: "user14@example.com",
+        role: "conselheiro",
+        director_area: null,
+      },
 
       // AAAKI
       {
@@ -447,6 +459,12 @@ export async function seed(knex: Knex): Promise<void> {
         organization_id: 3,
         user_email: "user14@example.com",
         role: "membro",
+        director_area: null,
+      },
+      {
+        organization_id: 3,
+        user_email: "user9@example.com",
+        role: "conselheiro",
         director_area: null,
       },
 

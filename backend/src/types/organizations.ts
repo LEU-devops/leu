@@ -1,4 +1,4 @@
-export type OrganizationRole = "aluno" | "membro" | "diretor" | "presidente" | "vice";
+export type OrganizationRole = "aluno" | "membro" | "conselheiro" | "diretor" | "presidente" | "vice";
 
 export interface Organization {
     id: number;

@@ -3,6 +3,7 @@ import { db } from "../../services/db";
 export type OrganizationRole =
   | "aluno"
   | "membro"
+  | "conselheiro"
   | "diretor"
   | "presidente"
   | "vice";
@@ -47,8 +48,9 @@ const ROLE_PRIORITY: Record<OrganizationRole, number> = {
   presidente: 0,
   vice: 1,
   diretor: 2,
-  membro: 3,
-  aluno: 4,
+  conselheiro: 3,
+  membro: 4,
+  aluno: 5,
 };
 
 /** Public hierarchy of every organization with members ordered by role priority. */
