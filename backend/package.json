@@ -10,7 +10,8 @@
     "migrate": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
     "migrate:make": "knex migrate:make",
-    "test": "node --require ts-node/register --test \"src/**/*.test.ts\""
+    "test": "node --require ts-node/register --test \"src/**/*.test.ts\"",
+    "schema:diagram": "ts-node scripts/schema-diagram.ts"
   },
   "keywords": [],
   "author": "Rafael Setton",
