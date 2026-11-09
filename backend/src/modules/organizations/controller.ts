@@ -1,4 +1,6 @@
 import { db } from "../../services/db";
+import { isIsoDate, today } from "../../utils/dates";
+import type { Knex } from "knex";
 
 export type OrganizationRole =
   | "aluno"
@@ -107,9 +109,10 @@ async function relevantPositions(
   email: string,
   organizationId: number,
 ): Promise<Position[]> {
-  return db("organization_users as ou")
+  return db("organization_positions as ou")
     .join("organizations as o", "o.id", "ou.organization_id")
     .where("ou.user_email", email)
+    .whereNull("ou.ended_on")
     .andWhere((query) =>
       query
         .where("ou.organization_id", organizationId)
@@ -359,7 +362,21 @@ function parseRemovals(raw: unknown): string[] {
 }
 
 /**
- * Applies removals, then additions, atomically. Removing and re-adding the same
+ * Ends the given open periods today. A period that also started today is deleted instead,
+ * so undoing a change on the same day leaves no zero-length entry in the history.
+ */
+export async function closePeriods(
+  trx: Knex.Transaction,
+  openPeriods: Knex.QueryBuilder,
+): Promise<void> {
+  const day = today();
+  await openPeriods.clone().where("started_on", day).delete();
+  await openPeriods.clone().update({ ended_on: day });
+}
+
+/**
+ * Applies removals, then additions, atomically. Removing ends the person's current period;
+ * adding opens a new one today. Removing and re-adding the same
  * email in one call changes that member's role.
  */
 export async function updateOrganizationMembers(
@@ -378,17 +395,15 @@ export async function updateOrganizationMembers(
 
   await db.transaction(async (trx) => {
     if (removals.length > 0) {
-      const existing = await trx("organization_users")
+      const current = trx("organization_positions")
         .where({ organization_id: organizationId })
         .whereIn("user_email", removals)
-        .select("user_email");
+        .whereNull("ended_on");
+      const existing = await current.clone().select("user_email");
       if (existing.length !== new Set(removals).size)
         throw new ValidationError("Some removed users are not members");
 
-      await trx("organization_users")
-        .where({ organization_id: organizationId })
-        .whereIn("user_email", removals)
-        .delete();
+      await closePeriods(trx, current);
     }
 
     if (additions.length > 0) {
@@ -396,23 +411,36 @@ export async function updateOrganizationMembers(
       if (users.length !== addedEmails.length)
         throw new ValidationError("Some added users do not exist");
 
-      const alreadyMembers = await trx("organization_users")
+      const alreadyMembers = await trx("organization_positions")
         .where({ organization_id: organizationId })
         .whereIn("user_email", addedEmails)
+        .whereNull("ended_on")
         .select("user_email");
       if (alreadyMembers.length > 0)
         throw new ValidationError(
           `Already a member: ${alreadyMembers.map((row) => row.user_email).join(", ")}`,
         );
 
-      await trx("organization_users").insert(
-        additions.map((addition) => ({
-          organization_id: organizationId,
-          user_email: addition.email,
-          role: addition.role,
-          director_area: addition.director_area,
-        })),
-      );
+      for (const addition of additions) {
+        // Undoing a removal made today reopens that period instead of starting a new one.
+        const endedToday = await trx("organization_positions")
+          .where({ organization_id: organizationId, user_email: addition.email, role: addition.role, ended_on: today() })
+          .andWhere((query) => addition.director_area === null
+            ? query.whereNull("director_area")
+            : query.where("director_area", addition.director_area))
+          .first();
+        if (endedToday)
+          await trx("organization_positions").where({ id: endedToday.id }).update({ ended_on: null });
+        else
+          await trx("organization_positions").insert({
+            organization_id: organizationId,
+            user_email: addition.email,
+            role: addition.role,
+            director_area: addition.director_area,
+            started_on: today(),
+            ended_on: null,
+          });
+      }
     }
   });
 
@@ -446,8 +474,9 @@ export async function listOrganizationsHierarchy(): Promise<
     .orderByRaw("CASE WHEN name = ? THEN 0 ELSE 1 END", [LEU_NAME])
     .orderBy("name", "asc");
 
-  const members = await db("organization_users as ou")
+  const members = await db("organization_positions as ou")
     .leftJoin("users as u", "u.email", "ou.user_email")
+    .whereNull("ou.ended_on")
     .select<
       OrganizationMemberRow[]
     >("ou.organization_id", "ou.user_email", "u.nickname as user_name", "u.profile_photo_url", "ou.role", "ou.director_area");
@@ -511,4 +540,137 @@ export async function organizationSummaries(ids: number[]): Promise<Map<number, 
     .whereIn("id", [...new Set(ids)])
     .select<OrganizationSummary[]>("id", "name", "logo_url", "gradient", "accent_color");
   return new Map(rows.map((row) => [row.id, row]));
+}
+
+// --- POSITION HISTORY ---
+
+export interface Period {
+  started_on: string;
+  ended_on: string | null;
+}
+
+/**
+ * Validates `{ started_on, ended_on }`: real dates, not in the future, start before end.
+ * `ended_on: null` (or missing) means the period is current.
+ */
+export function parsePeriod(input: { started_on?: unknown; ended_on?: unknown }): Period {
+  if (!isIsoDate(input.started_on))
+    throw new ValidationError("started_on must be a date (YYYY-MM-DD)");
+  const ended = input.ended_on === undefined || input.ended_on === null || input.ended_on === "" ? null : input.ended_on;
+  if (ended !== null && !isIsoDate(ended))
+    throw new ValidationError("ended_on must be a date (YYYY-MM-DD) or null");
+
+  const day = today();
+  if (input.started_on > day || (ended !== null && ended > day))
+    throw new ValidationError("Dates cannot be in the future");
+  if (ended !== null && ended < input.started_on)
+    throw new ValidationError("ended_on must be on or after started_on");
+  return { started_on: input.started_on, ended_on: ended };
+}
+
+/** Postgres and SQLite word unique violations differently; both mean "already has a current period". */
+export function isUniqueViolation(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /UNIQUE constraint failed|duplicate key value/.test(error.message);
+}
+
+export interface PositionView extends Period {
+  id: number;
+  email: string;
+  name: string;
+  profile_photo_url: string | null;
+  role: OrganizationRole;
+  director_area: string | null;
+}
+
+/** Every period of every person in the organization: current ones first, then the most recent. */
+export async function listOrganizationPositions(organizationId: number): Promise<PositionView[]> {
+  await assertOrganizationExists(organizationId);
+  const rows = await db("organization_positions as p")
+    .join("users as u", "u.email", "p.user_email")
+    .where("p.organization_id", organizationId)
+    .orderByRaw("CASE WHEN p.ended_on IS NULL THEN 0 ELSE 1 END")
+    .orderBy("p.ended_on", "desc")
+    .orderBy("p.started_on", "desc")
+    .select<PositionView[]>(
+      "p.id", "p.user_email as email", "u.nickname as name", "u.profile_photo_url",
+      "p.role", "p.director_area", "p.started_on", "p.ended_on",
+    );
+  return rows;
+}
+
+function parseRoleAndArea(input: { role?: unknown; director_area?: unknown }) {
+  if (typeof input.role !== "string" || !ORGANIZATION_ROLES.includes(input.role as OrganizationRole))
+    throw new ValidationError(`Invalid role: ${String(input.role)}`);
+  let area: string | null = null;
+  if (input.role === "diretor") {
+    if (typeof input.director_area !== "string" || input.director_area.trim().length === 0)
+      throw new ValidationError("Directors need a director_area");
+    area = input.director_area.trim();
+  }
+  return { role: input.role as OrganizationRole, director_area: area };
+}
+
+export interface PositionInput {
+  email?: unknown;
+  role?: unknown;
+  director_area?: unknown;
+  started_on?: unknown;
+  ended_on?: unknown;
+}
+
+async function savePosition(write: () => Promise<unknown>) {
+  try {
+    await write();
+  } catch (error) {
+    if (isUniqueViolation(error))
+      throw new ConflictError("This person already has a current position in this organization");
+    throw error;
+  }
+}
+
+/** Adds a period by hand, usually a past one from before the app existed. */
+export async function createOrganizationPosition(organizationId: number, input: PositionInput): Promise<PositionView[]> {
+  await assertOrganizationExists(organizationId);
+  if (typeof input.email !== "string" || !(await db("users").where({ email: input.email }).first()))
+    throw new ValidationError("User does not exist");
+  const { role, director_area } = parseRoleAndArea(input);
+  const period = parsePeriod(input);
+
+  await savePosition(() => db("organization_positions").insert({
+    organization_id: organizationId,
+    user_email: input.email as string,
+    role,
+    director_area,
+    ...period,
+  }));
+  return listOrganizationPositions(organizationId);
+}
+
+async function positionRow(organizationId: number, id: number) {
+  const row = await db("organization_positions").where({ id, organization_id: organizationId }).first();
+  if (!row) throw new NotFoundError(`Position ${id} not found`);
+  return row;
+}
+
+/** Fixes the role or the dates of a period. */
+export async function updateOrganizationPosition(organizationId: number, id: number, input: PositionInput): Promise<PositionView[]> {
+  const row = await positionRow(organizationId, id);
+  const { role, director_area } = parseRoleAndArea({
+    role: input.role ?? row.role,
+    director_area: input.director_area === undefined ? row.director_area : input.director_area,
+  });
+  const period = parsePeriod({
+    started_on: input.started_on ?? row.started_on,
+    ended_on: input.ended_on === undefined ? row.ended_on : input.ended_on,
+  });
+  await savePosition(() => db("organization_positions").where({ id }).update({ role, director_area, ...period }));
+  return listOrganizationPositions(organizationId);
+}
+
+/** Deletes a period entered by mistake (to end a current one, set its `ended_on`). */
+export async function deleteOrganizationPosition(organizationId: number, id: number): Promise<PositionView[]> {
+  await positionRow(organizationId, id);
+  await db("organization_positions").where({ id }).delete();
+  return listOrganizationPositions(organizationId);
 }

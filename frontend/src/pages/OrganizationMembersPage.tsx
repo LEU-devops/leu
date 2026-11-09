@@ -5,7 +5,11 @@ import Loading from '../components/Loading'
 import Select from '../components/Select'
 import { getLoggedUser } from '../services/auth'
 import { getOrganizations } from '../services/competition'
-import { getOrganizationPermissions, updateOrganizationMembers } from '../services/organizations'
+import { createOrganizationPosition, deleteOrganizationPosition, getOrganizationPermissions, getOrganizationPositions, updateOrganizationMembers, updateOrganizationPosition } from '../services/organizations'
+import { getOrganization } from '../services/competition'
+import { sportsErrorMessage } from '../services/sports'
+import PeriodHistory from '../components/PeriodHistory'
+import type { PositionPeriod } from '../types/sports'
 import { UserAvatar, UserSearch } from '../components/UserSearch'
 import { ROLE_OPTIONS, roleLabel } from '../utils/roles'
 import type { MemberAddition, OrganizationHierarchy, OrganizationMember, OrganizationRole, UserSearchResult } from '../types/organizations'
@@ -184,6 +188,7 @@ export default function OrganizationMembersPage() {
     const [loadError, setLoadError] = useState<string | null>(null)
     const error = invalidId ? 'Entidade inválida.' : loadError
 
+    const [positions, setPositions] = useState<PositionPeriod[]>([])
     const [removed, setRemoved] = useState<Set<string>>(new Set())
     const [added, setAdded] = useState<PendingAddition[]>([])
 
@@ -197,8 +202,8 @@ export default function OrganizationMembersPage() {
             return
 
         let cancelled = false
-        Promise.all([getOrganizations(), getOrganizationPermissions(id).then((result) => result.canManageMembers)])
-            .then(([all, allowed]) => {
+        Promise.all([getOrganizations(), getOrganizationPermissions(id).then((result) => result.canManageMembers), getOrganizationPositions(id)])
+            .then(([all, allowed, history]) => {
                 if (cancelled)
                     return
                 const current = all.find((row) => row.id === id)
@@ -208,6 +213,7 @@ export default function OrganizationMembersPage() {
                 }
                 const leu = all.find((row) => row.name === 'LEU')
                 setOrganization(current)
+                setPositions(history)
                 setCanManage(allowed)
                 setIsLeuManager(Boolean(myEmail && leu?.members.some((member) => member.email === myEmail && isManagerPosition(member))))
             })
@@ -331,6 +337,7 @@ export default function OrganizationMembersPage() {
                 return
             }
             setOrganization(updated)
+            setPositions(await getOrganizationPositions(organization.id))
             setRemoved(new Set())
             setAdded([])
             setSavedMessage(`${changeCount} ${changeCount === 1 ? 'alteração salva' : 'alterações salvas'}.`)
@@ -341,6 +348,13 @@ export default function OrganizationMembersPage() {
         } finally {
             setSaving(false)
         }
+    }
+
+    /** History edits can change who is current, so the members list is reloaded too. */
+    async function afterHistoryChange(history: PositionPeriod[]) {
+        setPositions(history)
+        if (organization)
+            setOrganization(await getOrganization(organization.id))
     }
 
     return (
@@ -435,6 +449,30 @@ export default function OrganizationMembersPage() {
                                 })}
                             </ul>
                         )}
+                    </section>
+
+                    <section className="space-y-3">
+                        <h2 className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-300">Histórico ({positions.length})</h2>
+                        <p className="text-sm text-zinc-400">
+                            Todos os períodos, atuais e antigos. Adicionar e remover membros acima já abre e encerra os períodos com a data do dia;
+                            aqui você corrige datas e registra quem fez parte antes. Estas edições são salvas na hora.
+                        </p>
+                        {hasChanges ? (
+                            <p className="rounded-xl border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+                                Salve ou descarte as alterações pendentes antes de editar o histórico.
+                            </p>
+                        ) : null}
+                        <PeriodHistory
+                            rows={positions.map((position) => ({ ...position, label: roleLabel(position) }))}
+                            canEdit={!hasChanges}
+                            roleOptions={ROLE_OPTIONS}
+                            needsArea={(role) => role === 'diretor'}
+                            areaSuggestions={areaSuggestions}
+                            errorMessage={(err) => sportsErrorMessage(err)}
+                            onCreate={async (period) => afterHistoryChange(await createOrganizationPosition(organization.id, { ...period, role: period.role as OrganizationRole }))}
+                            onUpdate={async (positionId, period) => afterHistoryChange(await updateOrganizationPosition(organization.id, positionId, period))}
+                            onDelete={async (positionId) => afterHistoryChange(await deleteOrganizationPosition(organization.id, positionId))}
+                        />
                     </section>
                 </div>
             ) : null}

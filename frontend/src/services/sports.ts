@@ -1,4 +1,4 @@
-import type { Award, NewAward, PublicProfile, SportsTeam, SportsTeamDetail, SportsTeamPermissions } from '../types/sports'
+import type { Award, NewAward, Period, PublicProfile, SportsTeam, SportsTeamDetail, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
 import { request } from './api'
 import { getToken } from './auth'
 
@@ -28,8 +28,24 @@ export function deleteSportsTeam(id: number): Promise<null> {
     return request(`/sports-teams/${id}`, { method: 'DELETE' })
 }
 
-export function setSportsTeamRoster(id: number, members: { email: string, is_dm: boolean }[]): Promise<SportsTeamDetail> {
+export function setSportsTeamRoster(id: number, members: { email: string, is_athlete: boolean, is_dm: boolean }[]): Promise<SportsTeamDetail> {
     return request(`/sports-teams/${id}/members`, { method: 'PUT', body: JSON.stringify({ members }) })
+}
+
+export function getTeamStints(id: number): Promise<StintPeriod[]> {
+    return request(`/sports-teams/${id}/stints`)
+}
+
+export function createTeamStint(id: number, stint: Period & { email: string, role: StintRole }): Promise<StintPeriod[]> {
+    return request(`/sports-teams/${id}/stints`, { method: 'POST', body: JSON.stringify(stint) })
+}
+
+export function updateTeamStint(id: number, stintId: number, period: Period): Promise<StintPeriod[]> {
+    return request(`/sports-teams/${id}/stints/${stintId}`, { method: 'PUT', body: JSON.stringify(period) })
+}
+
+export function deleteTeamStint(id: number, stintId: number): Promise<StintPeriod[]> {
+    return request(`/sports-teams/${id}/stints/${stintId}`, { method: 'DELETE' })
 }
 
 export function getAwards(filter: { organizationId?: number, teamId?: number, email?: string }): Promise<Award[]> {
@@ -58,6 +74,13 @@ const ERROR_TRANSLATIONS: [RegExp, string][] = [
     [/name is required/, 'O nome é obrigatório.'],
     [/name must have at most/, 'O nome pode ter no máximo 60 caracteres.'],
     [/must keep at least one DM/, 'O time precisa continuar com pelo menos um DM.'],
+    [/must be an athlete, a DM or both/, 'Cada pessoa precisa ser atleta, DM ou os dois.'],
+    [/Dates cannot be in the future/, 'As datas não podem estar no futuro.'],
+    [/ended_on must be on or after/, 'O fim precisa ser depois do início.'],
+    [/started_on must be a date/, 'Informe a data de início.'],
+    [/already has a current/, 'Essa pessoa já tem um período atual nesse cargo. Encerre-o antes.'],
+    [/Directors need a director_area/, 'Informe a diretoria.'],
+    [/User does not exist/, 'Escolha a pessoa.'],
     [/same user cannot appear twice/, 'A mesma pessoa aparece duas vezes.'],
     [/Team awards need a team/, 'Premiações de equipe precisam de um time.'],
     [/title is required/, 'O título é obrigatório.'],

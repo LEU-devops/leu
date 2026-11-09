@@ -4,6 +4,10 @@ import path from "node:path";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import {
     assertCanManageIdentity,
+    createOrganizationPosition,
+    deleteOrganizationPosition,
+    listOrganizationPositions,
+    updateOrganizationPosition,
     assertCanManageMembers,
     ConflictError,
     ForbiddenError,
@@ -105,6 +109,33 @@ router.delete("/:id/images/:kind", authMiddleware, async (req: Request, res: Res
     const { previous, organization } = await setOrganizationImage(id, kind, null);
     await deleteUpload(previous);
     res.json(organization);
+});
+
+// --- POSITION HISTORY --- (read: public; write: same people who manage the members)
+
+/** Every period (current and past) of every person in the organization. */
+router.get("/:id/positions", async (req: Request, res: Response) => {
+    res.json(await listOrganizationPositions(parseId(req.params.id)));
+});
+
+/** Body: `{ email, role, director_area, started_on, ended_on }` (dates "YYYY-MM-DD"; ended_on null = current). */
+router.post("/:id/positions", authMiddleware, async (req: Request, res: Response) => {
+    const id = parseId(req.params.id);
+    await assertCanManageMembers(req.user!.email, id);
+    res.status(201).json(await createOrganizationPosition(id, req.body ?? {}));
+});
+
+/** Body: any of `{ role, director_area, started_on, ended_on }`. */
+router.put("/:id/positions/:positionId", authMiddleware, async (req: Request, res: Response) => {
+    const id = parseId(req.params.id);
+    await assertCanManageMembers(req.user!.email, id);
+    res.json(await updateOrganizationPosition(id, parseId(req.params.positionId), req.body ?? {}));
+});
+
+router.delete("/:id/positions/:positionId", authMiddleware, async (req: Request, res: Response) => {
+    const id = parseId(req.params.id);
+    await assertCanManageMembers(req.user!.email, id);
+    res.json(await deleteOrganizationPosition(id, parseId(req.params.positionId)));
 });
 
 /** Batch of member changes: `{ add: [{ email, role, director_area }], remove: [email] }`. */

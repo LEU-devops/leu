@@ -7,11 +7,17 @@ export interface SportsTeam {
     name: string;
 }
 
-/** Row shape of `sports_team_members`: an athlete of a team; DMs are flagged. */
-export interface SportsTeamMember {
+export const STINT_ROLES = ["atleta", "dm"] as const;
+export type StintRole = (typeof STINT_ROLES)[number];
+
+/** Row shape of `sports_team_stints`: a period as athlete or DM of a team; `ended_on = null` means current. */
+export interface SportsTeamStint {
+    id: number;
     team_id: SportsTeam["id"];
     user_email: string;
-    is_dm: boolean;
+    role: StintRole;
+    started_on: string;
+    ended_on: string | null;
 }
 
 export const AWARD_KINDS = ["individual", "equipe"] as const;
@@ -42,7 +48,7 @@ export interface AwardRecipient {
 declare module "knex/types/tables" {
     interface Tables {
         sports_teams: SportsTeam;
-        sports_team_members: SportsTeamMember;
+        sports_team_stints: SportsTeamStint;
         awards: Award;
         award_recipients: AwardRecipient;
     }

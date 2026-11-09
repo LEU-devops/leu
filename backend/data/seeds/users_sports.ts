@@ -7,7 +7,7 @@ import type { Knex } from "knex";
 export async function seed(knex: Knex): Promise<void> {
   await knex("award_recipients").del();
   await knex("awards").del();
-  await knex("sports_team_members").del();
+  await knex("sports_team_stints").del();
   await knex("sports_teams").del();
 
   await knex("sports_teams").insert([
@@ -16,16 +16,29 @@ export async function seed(knex: Knex): Promise<void> {
     { id: 3, organization_id: 2, name: "Basquete Masculino" },
   ]);
 
-  await knex("sports_team_members").insert([
-    { team_id: 1, user_email: "user7@example.com", is_dm: true },
-    { team_id: 1, user_email: "user6@example.com", is_dm: false },
-    { team_id: 1, user_email: "user8@example.com", is_dm: false },
-    { team_id: 1, user_email: "user1@example.com", is_dm: false },
-    { team_id: 2, user_email: "user11@example.com", is_dm: true },
-    { team_id: 2, user_email: "user12@example.com", is_dm: true },
-    { team_id: 2, user_email: "user6@example.com", is_dm: false },
-    { team_id: 3, user_email: "user15@example.com", is_dm: true },
-    { team_id: 3, user_email: "user16@example.com", is_dm: false },
+  const CURRENT = { started_on: "2026-01-01", ended_on: null };
+  await knex("sports_team_stints").insert([
+    // Current rosters
+    { team_id: 1, user_email: "user7@example.com", role: "dm", ...CURRENT },
+    { team_id: 1, user_email: "user7@example.com", role: "atleta", ...CURRENT },
+    { team_id: 1, user_email: "user8@example.com", role: "atleta", ...CURRENT },
+    { team_id: 1, user_email: "user1@example.com", role: "atleta", ...CURRENT },
+    { team_id: 2, user_email: "user11@example.com", role: "dm", ...CURRENT },
+    { team_id: 2, user_email: "user12@example.com", role: "dm", ...CURRENT },
+    { team_id: 2, user_email: "user6@example.com", role: "atleta", ...CURRENT },
+    { team_id: 3, user_email: "user15@example.com", role: "dm", ...CURRENT },
+    { team_id: 3, user_email: "user16@example.com", role: "atleta", ...CURRENT },
+    // History: athlete of Vôlei Masculino since 2023, DM there in 2024
+    { team_id: 1, user_email: "user6@example.com", role: "atleta", started_on: "2023-03-01", ended_on: null },
+    { team_id: 1, user_email: "user6@example.com", role: "dm", started_on: "2024-01-10", ended_on: "2024-12-15" },
+    { team_id: 2, user_email: "user6@example.com", role: "dm", started_on: "2025-02-01", ended_on: "2025-11-30" },
+  ]);
+
+  // Past positions (the 2026 ones come from users.ts)
+  await knex("organization_positions").insert([
+    { organization_id: 1, user_email: "user1@example.com", role: "diretor", director_area: "Eventos", started_on: "2025-01-01", ended_on: "2025-12-31" },
+    { organization_id: 1, user_email: "user1@example.com", role: "membro", director_area: null, started_on: "2024-03-01", ended_on: "2024-12-31" },
+    { organization_id: 2, user_email: "user6@example.com", role: "vice", director_area: null, started_on: "2025-01-01", ended_on: "2025-12-31" },
   ]);
 
   await knex("awards").insert([

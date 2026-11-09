@@ -6,8 +6,20 @@ import OrganizationLogo from '../components/OrganizationLogo'
 import { UserAvatar, UserSearch } from '../components/UserSearch'
 import AwardRow from '../components/AwardRow'
 import { getLoggedUser } from '../services/auth'
-import { deleteSportsTeam, getSportsTeam, getSportsTeamPermissions, renameSportsTeam, setSportsTeamRoster, sportsErrorMessage } from '../services/sports'
-import type { SportsTeamDetail, SportsTeamMember, SportsTeamPermissions } from '../types/sports'
+import {
+    createTeamStint,
+    deleteSportsTeam,
+    deleteTeamStint,
+    getSportsTeam,
+    getSportsTeamPermissions,
+    getTeamStints,
+    renameSportsTeam,
+    setSportsTeamRoster,
+    sportsErrorMessage,
+    updateTeamStint,
+} from '../services/sports'
+import PeriodHistory from '../components/PeriodHistory'
+import type { SportsTeamDetail, SportsTeamMember, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
 import { organizationBackground } from '../utils/gradient'
 
 const INPUT_CLASS =
@@ -44,6 +56,17 @@ interface RosterChanges {
     removed: DraftMember[]
     madeDm: DraftMember[]
     unmadeDm: DraftMember[]
+    madeAthlete: DraftMember[]
+    unmadeAthlete: DraftMember[]
+}
+
+const STINT_ROLE_OPTIONS: { value: StintRole, label: string }[] = [
+    { value: 'atleta', label: 'Atleta' },
+    { value: 'dm', label: 'DM' },
+]
+
+function rolesText(member: DraftMember): string {
+    return [member.is_athlete ? 'atleta' : null, member.is_dm ? 'DM' : null].filter(Boolean).join(' e ')
 }
 
 function rosterChanges(original: SportsTeamMember[], draft: DraftMember[]): RosterChanges {
@@ -54,6 +77,8 @@ function rosterChanges(original: SportsTeamMember[], draft: DraftMember[]): Rost
         removed: original.filter((member) => !after.has(member.email)),
         madeDm: draft.filter((member) => before.has(member.email) && member.is_dm && !before.get(member.email)!.is_dm),
         unmadeDm: draft.filter((member) => before.has(member.email) && !member.is_dm && before.get(member.email)!.is_dm),
+        madeAthlete: draft.filter((member) => before.has(member.email) && member.is_athlete && !before.get(member.email)!.is_athlete),
+        unmadeAthlete: draft.filter((member) => before.has(member.email) && !member.is_athlete && before.get(member.email)!.is_athlete),
     }
 }
 
@@ -86,16 +111,18 @@ export default function SportsTeamPage() {
     const [saving, setSaving] = useState(false)
     const [status, setStatus] = useState<{ kind: 'error' | 'success', text: string } | null>(null)
     const [renaming, setRenaming] = useState<string | null>(null)
+    const [stints, setStints] = useState<StintPeriod[]>([])
 
     useEffect(() => {
         if (invalidId)
             return
         let cancelled = false
-        Promise.all([getSportsTeam(id), getSportsTeamPermissions(id)])
-            .then(([data, allowed]) => {
+        Promise.all([getSportsTeam(id), getSportsTeamPermissions(id), getTeamStints(id)])
+            .then(([data, allowed, history]) => {
                 if (cancelled)
                     return
                 setTeam(data)
+                setStints(history)
                 setPermissions(allowed)
             })
             .catch(() => !cancelled && setLoadError('Não foi possível carregar o time.'))
@@ -106,7 +133,8 @@ export default function SportsTeamPage() {
     }, [id, invalidId])
 
     const changes = useMemo(() => (team && draft ? rosterChanges(team.members, draft) : null), [team, draft])
-    const changeCount = changes ? changes.added.length + changes.removed.length + changes.madeDm.length + changes.unmadeDm.length : 0
+    const changeCount = changes ? Object.values(changes).reduce((total, list) => total + list.length, 0) : 0
+    const draftInvalid = draft?.some((member) => !member.is_athlete && !member.is_dm) ?? false
 
     /** A DM (who is not an organization manager) removing their own DM role loses access to this editor. */
     const selfLosesAccess = Boolean(
@@ -125,8 +153,9 @@ export default function SportsTeamPage() {
         setSaving(true)
         setStatus(null)
         try {
-            const updated = await setSportsTeamRoster(team.id, draft.map(({ email, is_dm }) => ({ email, is_dm })))
+            const updated = await setSportsTeamRoster(team.id, draft.map(({ email, is_athlete, is_dm }) => ({ email, is_athlete, is_dm })))
             setTeam(updated)
+            setStints(await getTeamStints(team.id))
             setDraft(null)
             setStep('idle')
             if (selfLosesAccess)
@@ -170,9 +199,17 @@ export default function SportsTeamPage() {
         }
     }
 
+    /** History edits can change who is current (and whether I am still a DM), so reload both. */
+    async function afterHistoryChange(history: StintPeriod[]) {
+        setStints(history)
+        const [updated, allowed] = await Promise.all([getSportsTeam(id), getSportsTeamPermissions(id)])
+        setTeam(updated)
+        setPermissions(allowed)
+    }
+
     const accent = team?.organization.accent_color ?? null
     const dms = team?.members.filter((member) => member.is_dm) ?? []
-    const athletes = team?.members.filter((member) => !member.is_dm) ?? []
+    const athletes = team?.members.filter((member) => member.is_athlete) ?? []
 
     return (
         <main className="flex-1 space-y-6 p-4 md:p-8">
@@ -234,7 +271,7 @@ export default function SportsTeamPage() {
                                 isTaken={(email) => draft.some((member) => member.email === email)}
                                 takenLabel="Já está no time"
                                 placeholder="Adicionar atleta: buscar por nome, apelido ou e-mail"
-                                onPick={(user) => setDraft([...draft, { email: user.email, name: user.full_name || user.name, profile_photo_url: user.profile_photo_url, is_dm: false }])}
+                                onPick={(user) => setDraft([...draft, { email: user.email, name: user.full_name || user.name, profile_photo_url: user.profile_photo_url, is_athlete: true, is_dm: false }])}
                             />
                             <ul className="space-y-2">
                                 {draft.map((member) => {
@@ -247,8 +284,19 @@ export default function SportsTeamPage() {
                                                     {member.name}
                                                     {member.email === myEmail ? <span className="ml-2 text-xs text-zinc-500">(você)</span> : null}
                                                 </span>
-                                                <span className="block truncate text-xs text-zinc-500">{member.email}</span>
+                                                <span className={`block truncate text-xs ${!member.is_athlete && !member.is_dm ? 'text-red-300' : 'text-zinc-500'}`}>
+                                                    {!member.is_athlete && !member.is_dm ? 'Marque atleta, DM ou os dois' : member.email}
+                                                </span>
                                             </span>
+                                            <label className="flex items-center gap-2 text-xs text-zinc-300">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={member.is_athlete}
+                                                    onChange={(event) => setDraft(draft.map((item) => (item.email === member.email ? { ...item, is_athlete: event.target.checked } : item)))}
+                                                    className="accent-red-600"
+                                                />
+                                                Atleta
+                                            </label>
                                             <label className="flex items-center gap-2 text-xs text-zinc-300">
                                                 <input
                                                     type="checkbox"
@@ -298,6 +346,19 @@ export default function SportsTeamPage() {
                             </p>
                         ) : null}
                     </section>
+
+                    <section className="space-y-4">
+                        <SectionHeading title="Histórico do elenco" count={stints.length} accent={accent} />
+                        <PeriodHistory
+                            rows={stints.map((stint) => ({ ...stint, label: stint.role === 'dm' ? 'DM' : 'Atleta' }))}
+                            canEdit={permissions.canManageRoster && !draft}
+                            roleOptions={STINT_ROLE_OPTIONS}
+                            errorMessage={(err) => sportsErrorMessage(err)}
+                            onCreate={async (period) => afterHistoryChange(await createTeamStint(team.id, { ...period, role: period.role as StintRole }))}
+                            onUpdate={async (stintId, period) => afterHistoryChange(await updateTeamStint(team.id, stintId, period))}
+                            onDelete={async (stintId) => afterHistoryChange(await deleteTeamStint(team.id, stintId))}
+                        />
+                    </section>
                 </div>
             ) : null}
 
@@ -312,7 +373,7 @@ export default function SportsTeamPage() {
                             <button type="button" onClick={() => { setDraft(null); setStatus(null) }} className={SECONDARY_BUTTON}>Cancelar</button>
                             <button
                                 type="button"
-                                disabled={changeCount === 0}
+                                disabled={changeCount === 0 || draftInvalid}
                                 onClick={() => setStep('review')}
                                 className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
                             >
@@ -333,11 +394,14 @@ export default function SportsTeamPage() {
                 >
                     <p className="mb-4">As seguintes alterações serão aplicadas ao {team.name}:</p>
                     <div className="space-y-4">
-                        <ChangeList title="Adicionar" color="text-emerald-400" items={changes.added.map((member) => `+ ${member.name}${member.is_dm ? ' (DM)' : ''}`)} />
+                        <ChangeList title="Adicionar" color="text-emerald-400" items={changes.added.map((member) => `+ ${member.name} (${rolesText(member)})`)} />
+                        <ChangeList title="Passa a jogar" color="text-amber-400" items={changes.madeAthlete.map((member) => `~ ${member.name}`)} />
+                        <ChangeList title="Deixa de jogar" color="text-amber-400" items={changes.unmadeAthlete.map((member) => `~ ${member.name}`)} />
                         <ChangeList title="Tornar DM" color="text-amber-400" items={changes.madeDm.map((member) => `~ ${member.name}`)} />
                         <ChangeList title="Deixar de ser DM" color="text-amber-400" items={changes.unmadeDm.map((member) => `~ ${member.name}`)} />
-                        <ChangeList title="Remover" color="text-red-400" items={changes.removed.map((member) => `− ${member.name}${member.is_dm ? ' (DM)' : ''}`)} />
+                        <ChangeList title="Remover" color="text-red-400" items={changes.removed.map((member) => `− ${member.name} (${rolesText(member)})`)} />
                     </div>
+                    <p className="mt-4 text-xs text-zinc-500">Quem sai ou muda de função tem o período encerrado hoje, e continua no histórico.</p>
                 </ConfirmDialog>
             ) : null}
 
@@ -351,7 +415,10 @@ export default function SportsTeamPage() {
 
             {step === 'delete' && team ? (
                 <ConfirmDialog title="Excluir time" confirmLabel="Excluir time" danger busy={saving} onCancel={closeDialog} onConfirm={() => void removeTeam()}>
-                    <p>O time <strong className="text-zinc-100">{team.name}</strong> e o seu elenco serão excluídos.</p>
+                    <p>O time <strong className="text-zinc-100">{team.name}</strong> e todo o histórico do elenco serão excluídos.</p>
+                    <p className="mt-3 rounded-xl border border-red-900/60 bg-red-950/40 px-3 py-2 text-red-200">
+                        Os períodos como atleta e DM deste time somem da trajetória de todos que já passaram por ele.
+                    </p>
                     <p className="mt-3">As premiações já dadas continuam no perfil dos atletas, mas sem o vínculo com o time.</p>
                 </ConfirmDialog>
             ) : null}

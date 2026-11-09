@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import Loading from '../components/Loading'
 import ProfileBadges from '../components/badges/ProfileBadges'
+import Timeline from '../components/Timeline'
 import { UserAvatar } from '../components/UserSearch'
 import { getLoggedUser } from '../services/auth'
 import { getPublicProfile } from '../services/sports'
@@ -65,6 +66,14 @@ export default function PublicProfilePage() {
                     </header>
 
                     <ProfileBadges profile={profile} />
+
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-xs font-semibold uppercase tracking-[0.3em] text-zinc-300">Trajetória</h2>
+                            <span className="h-px flex-1 bg-gradient-to-r from-white/15 to-transparent" />
+                        </div>
+                        <Timeline profile={profile} />
+                    </section>
                 </div>
             ) : null}
         </main>

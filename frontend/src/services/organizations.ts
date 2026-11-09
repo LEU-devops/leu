@@ -1,4 +1,5 @@
-import type { IdentityChange, IdentityImage, MembersChange, OrganizationHierarchy, OrganizationPermissions, UserSearchResult } from '../types/organizations'
+import type { Period, PositionPeriod } from '../types/sports'
+import type { IdentityChange, IdentityImage, MembersChange, OrganizationHierarchy, OrganizationRole, OrganizationPermissions, UserSearchResult } from '../types/organizations'
 import { request } from './api'
 import { getToken } from './auth'
 
@@ -21,6 +22,25 @@ export function updateOrganizationMembers(id: number, change: MembersChange): Pr
         method: 'PUT',
         body: JSON.stringify(change),
     })
+}
+
+export function getOrganizationPositions(id: number): Promise<PositionPeriod[]> {
+    return request(`/organizations/${id}/positions`)
+}
+
+export function createOrganizationPosition(
+    id: number,
+    position: Period & { email: string, role: OrganizationRole, director_area: string | null },
+): Promise<PositionPeriod[]> {
+    return request(`/organizations/${id}/positions`, { method: 'POST', body: JSON.stringify(position) })
+}
+
+export function updateOrganizationPosition(id: number, positionId: number, period: Period): Promise<PositionPeriod[]> {
+    return request(`/organizations/${id}/positions/${positionId}`, { method: 'PUT', body: JSON.stringify(period) })
+}
+
+export function deleteOrganizationPosition(id: number, positionId: number): Promise<PositionPeriod[]> {
+    return request(`/organizations/${id}/positions/${positionId}`, { method: 'DELETE' })
 }
 
 export function updateOrganizationIdentity(id: number, change: IdentityChange): Promise<OrganizationHierarchy> {

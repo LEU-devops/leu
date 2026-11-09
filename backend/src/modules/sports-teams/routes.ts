@@ -3,6 +3,10 @@ import { authMiddleware } from "../../middlewares/auth.middleware";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../organizations/controller";
 import {
     createSportsTeam,
+    createTeamStint,
+    deleteTeamStint,
+    listTeamStints,
+    updateTeamStint,
     deleteSportsTeam,
     getSportsTeam,
     getSportsTeamPermissions,
@@ -50,9 +54,28 @@ router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
     res.sendStatus(204);
 });
 
-/** Replaces the roster. Body: `{ members: [{ email, is_dm }] }`. */
+/** Sets the current roster (ending/starting periods today). Body: `{ members: [{ email, is_athlete, is_dm }] }`. */
 router.put("/:id/members", authMiddleware, async (req: Request, res: Response) => {
     res.json(await setSportsTeamRoster(req.user!.email, parseId(req.params.id), req.body ?? {}));
+});
+
+// --- ROSTER HISTORY --- (read: public; write: same people who edit the roster)
+
+router.get("/:id/stints", async (req: Request, res: Response) => {
+    res.json(await listTeamStints(parseId(req.params.id)));
+});
+
+/** Body: `{ email, role: "atleta" | "dm", started_on, ended_on }` (dates "YYYY-MM-DD"; ended_on null = current). */
+router.post("/:id/stints", authMiddleware, async (req: Request, res: Response) => {
+    res.status(201).json(await createTeamStint(req.user!.email, parseId(req.params.id), req.body ?? {}));
+});
+
+router.put("/:id/stints/:stintId", authMiddleware, async (req: Request, res: Response) => {
+    res.json(await updateTeamStint(req.user!.email, parseId(req.params.id), parseId(req.params.stintId), req.body ?? {}));
+});
+
+router.delete("/:id/stints/:stintId", authMiddleware, async (req: Request, res: Response) => {
+    res.json(await deleteTeamStint(req.user!.email, parseId(req.params.id), parseId(req.params.stintId)));
 });
 
 router.use((err: Error, _req: Request, res: Response, next: NextFunction) => {

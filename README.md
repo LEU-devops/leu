@@ -5,7 +5,6 @@
 ### Usuários, Organizações e Cargos
 
 - [x] Melhorar página da gestão
-- [ ] Gerenciar Org:
 - [x] Gerenciar Membros (secre)
 - [x] Nome, Gradiente, Logo... (mkt)
 - [x] Gerenciar Times, e DMs (DM tbm pode alterar DM) (esportes)

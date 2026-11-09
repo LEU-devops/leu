@@ -2,7 +2,7 @@ import type { Knex } from "knex";
 
 export async function seed(knex: Knex): Promise<void> {
   // Delete relation rows first to satisfy FK constraints.
-  await knex("organization_users").del();
+  await knex("organization_positions").del();
   await knex("organizations").del();
   await knex("users").del();
 
@@ -358,8 +358,10 @@ export async function seed(knex: Knex): Promise<void> {
       description: knex.raw("EXCLUDED.description"),
     }); // Update gradient if organization already exists
 
-  await knex("organization_users")
-    .insert([
+  // Current positions of the 2026 management (past ones are in users_sports.ts).
+  await knex("organization_positions")
+    .insert(
+      [
       // LEU
       {
         organization_id: 1,
@@ -577,7 +579,6 @@ export async function seed(knex: Knex): Promise<void> {
         role: "diretor",
         director_area: "Tecnologia",
       },
-    ])
-    .onConflict(["organization_id", "user_email"])
-    .ignore();
+      ].map((position) => ({ ...position, started_on: "2026-01-01", ended_on: null })),
+    );
 }
