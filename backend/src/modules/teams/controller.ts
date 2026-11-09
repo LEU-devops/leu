@@ -1,5 +1,5 @@
 import { db } from "../../services/db";
-import { Team } from "../../types/competition";
+import { TeamWithScoring } from "../../types/competition";
 
 export class ValidationError extends Error {
     name = "Validation Error";
@@ -9,22 +9,26 @@ export class NotFoundError extends Error {
     name = "Not Found Error";
 }
 
-/** SQLite stores booleans as 0/1; make the API shape the same on every database. */
-function normalizeTeam(team: Team): Team {
-    return { ...team, bonus_torcida: Boolean(team.bonus_torcida) };
+/** Every Copa team with its scoring adjustments in an edition (none recorded = no bonus, no penalty), by name. */
+export async function listTeams(editionId: number): Promise<TeamWithScoring[]> {
+    const rows = await db("teams as t")
+        .leftJoin("edition_team_scoring as s", (join) => join.on("s.team_id", "t.id").andOnVal("s.edition_id", editionId))
+        .select("t.id", "t.name", "t.organization_id", "s.bonus_torcida", "s.penalty_points")
+        .orderBy("t.name");
+    return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        organization_id: row.organization_id,
+        bonus_torcida: Boolean(row.bonus_torcida),
+        penalty_points: row.penalty_points ?? 0,
+    }));
 }
 
-/** Every team, with its scoring adjustments, ordered by name. */
-export async function listTeams(): Promise<Team[]> {
-    const teams = await db("teams").select("*").orderBy("name");
-    return teams.map(normalizeTeam);
-}
-
-export async function getTeam(id: number): Promise<Team> {
-    const team = await db("teams").where({ id }).first();
+export async function getTeam(id: number, editionId: number): Promise<TeamWithScoring> {
+    const team = (await listTeams(editionId)).find((row) => row.id === id);
     if (!team)
         throw new NotFoundError(`Team ${id} not found`);
-    return normalizeTeam(team);
+    return team;
 }
 
 export interface TeamScoringInput {
@@ -33,28 +37,43 @@ export interface TeamScoringInput {
 }
 
 /**
- * Updates a team's scoring adjustments: the supporters ("torcida") bonus flag and/or the
- * penalty points. Fields left out of the input are kept as they are.
+ * Updates a team's scoring adjustments in one edition: the supporters ("torcida") bonus flag
+ * and/or the penalty points. Fields left out of the input are kept as they are.
  */
-export async function setTeamScoring(id: number, input: TeamScoringInput): Promise<Team> {
-    const changes: Partial<Pick<Team, "bonus_torcida" | "penalty_points">> = {};
+export async function setTeamScoring(id: number, editionId: number, input: TeamScoringInput): Promise<TeamWithScoring> {
+    const team = await getTeam(id, editionId); // 404 before touching anything
+    const next = { bonus_torcida: team.bonus_torcida, penalty_points: team.penalty_points };
 
     if (input.bonusTorcida !== undefined) {
         if (typeof input.bonusTorcida !== "boolean")
             throw new ValidationError("bonusTorcida must be a boolean");
-        changes.bonus_torcida = input.bonusTorcida;
+        next.bonus_torcida = input.bonusTorcida;
     }
 
     if (input.penaltyPoints !== undefined) {
         if (typeof input.penaltyPoints !== "number" || !Number.isInteger(input.penaltyPoints) || input.penaltyPoints < 0)
             throw new ValidationError("penaltyPoints must be a non-negative integer");
-        changes.penalty_points = input.penaltyPoints;
+        next.penalty_points = input.penaltyPoints;
     }
 
-    if (Object.keys(changes).length === 0)
+    if (input.bonusTorcida === undefined && input.penaltyPoints === undefined)
         throw new ValidationError("Provide bonusTorcida and/or penaltyPoints");
 
-    await getTeam(id); // 404 before touching anything
-    await db("teams").where({ id }).update(changes);
-    return getTeam(id);
+    await db("edition_team_scoring")
+        .insert({ edition_id: editionId, team_id: id, ...next })
+        .onConflict(["edition_id", "team_id"])
+        .merge();
+    return getTeam(id, editionId);
+}
+
+/** Links a Copa team to its organization (the AAA), so the AAA's sports board can manage its participations. */
+export async function setTeamOrganization(id: number, editionId: number, input: { organizationId?: unknown }): Promise<TeamWithScoring> {
+    await getTeam(id, editionId);
+    const organizationId = input.organizationId === null ? null : Number(input.organizationId);
+    if (organizationId !== null) {
+        if (!Number.isInteger(organizationId) || !(await db("organizations").where({ id: organizationId }).first()))
+            throw new ValidationError("organizationId must be an organization id or null");
+    }
+    await db("teams").where({ id }).update({ organization_id: organizationId });
+    return getTeam(id, editionId);
 }

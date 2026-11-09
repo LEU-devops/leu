@@ -1,4 +1,4 @@
-import type { Award, NewAward, Period, PublicProfile, SportsTeam, SportsTeamDetail, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
+import type { Award, NewAward, Participation, Period, PublicProfile, SportsTeam, SportsTeamDetail, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
 import { request } from './api'
 import { getToken } from './auth'
 
@@ -48,6 +48,42 @@ export function deleteTeamStint(id: number, stintId: number): Promise<StintPerio
     return request(`/sports-teams/${id}/stints/${stintId}`, { method: 'DELETE' })
 }
 
+// --- PARTICIPATIONS ---
+
+export function getTeamParticipations(teamId: number): Promise<Participation[]> {
+    return request(`/participations?team_id=${teamId}`)
+}
+
+export function createParticipation(input: { sports_team_id: number, competition: string, year: number, placement: number | null, athletes: string[] }): Promise<Participation> {
+    return request('/participations', { method: 'POST', body: JSON.stringify(input) })
+}
+
+/** Externo: any field; Copa: athletes only. */
+export function updateParticipation(id: number, changes: { competition?: string, year?: number, placement?: number | null, athletes?: string[] }): Promise<Participation> {
+    return request(`/participations/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+export function deleteParticipation(id: number): Promise<null> {
+    return request(`/participations/${id}`, { method: 'DELETE' })
+}
+
+/** The Copa modalities of an AAA in an edition, with live results. */
+export function getCopaEntries(organizationId: number, editionId: number): Promise<Participation[]> {
+    return request(`/participations/copa?organization_id=${organizationId}&edition=${editionId}`)
+}
+
+export function setCopaAthletes(modalityCode: string, copaTeamId: number, athletes: string[]): Promise<Participation> {
+    return request('/participations/copa', { method: 'PUT', body: JSON.stringify({ modality_code: modalityCode, copa_team_id: copaTeamId, athletes }) })
+}
+
+export function addParticipationAward(id: number, title: string, recipients: string[]): Promise<Participation> {
+    return request(`/participations/${id}/awards`, { method: 'POST', body: JSON.stringify({ title, recipients }) })
+}
+
+export function deleteParticipationAward(id: number, awardId: number): Promise<Participation> {
+    return request(`/participations/${id}/awards/${awardId}`, { method: 'DELETE' })
+}
+
 export function getAwards(filter: { organizationId?: number, teamId?: number, email?: string }): Promise<Award[]> {
     const params = new URLSearchParams()
     if (filter.organizationId !== undefined) params.set('organization_id', String(filter.organizationId))
@@ -81,6 +117,11 @@ const ERROR_TRANSLATIONS: [RegExp, string][] = [
     [/already has a current/, 'Essa pessoa já tem um período atual nesse cargo. Encerre-o antes.'],
     [/Directors need a director_area/, 'Informe a diretoria.'],
     [/User does not exist/, 'Escolha a pessoa.'],
+    [/competition is required/, 'Informe o campeonato.'],
+    [/Awards go to athletes/, 'A premiação vai para atletas desta participação.'],
+    [/with an award here cannot be removed/, 'Quem tem premiação neste campeonato não pode sair da lista. Exclua a premiação antes.'],
+    [/does not take part in this modality/, 'Este time não participa desta modalidade.'],
+    [/Team results are registered as participations/, 'Resultados de equipe são registrados como participações, na página do time.'],
     [/same user cannot appear twice/, 'A mesma pessoa aparece duas vezes.'],
     [/Team awards need a team/, 'Premiações de equipe precisam de um time.'],
     [/title is required/, 'O título é obrigatório.'],

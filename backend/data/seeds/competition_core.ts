@@ -11,26 +11,41 @@ export async function seed(knex: Knex): Promise<void> {
     await knex("venues").del();
     await knex("teams").del();
     await knex("modalities").del();
+    await knex("edition_team_scoring").del();
+    await knex("copa_editions").del();
+
+    // The current edition gets the brackets; the past one only exists to try the edition selector.
+    await knex("copa_editions").insert([
+        { id: 1, name: "Copa Eng", year: 2026, is_current: true },
+        { id: 2, name: "Copa Bixo", year: 2026, is_current: false },
+    ]);
+    if (knex.client.config.client === "pg")
+        await knex.raw("SELECT setval(pg_get_serial_sequence('copa_editions', 'id'), (SELECT MAX(id) FROM copa_editions))");
 
     await knex("modalities").insert([
-        { code: "BM", name: "Basquete Masculino", type: "chaveamento" },
-        { code: "BF", name: "Basquete Feminino", type: "chaveamento" },
-        { code: "FM", name: "Futsal Masculino", type: "chaveamento" },
-        { code: "FF", name: "Futsal Feminino", type: "chaveamento" },
-        { code: "VM", name: "Vôlei Masculino", type: "chaveamento" },
-        { code: "VF", name: "Vôlei Feminino", type: "chaveamento" },
-        { code: "HM", name: "Handebol Masculino", type: "chaveamento" },
-        { code: "HF", name: "Handebol Feminino", type: "chaveamento" },
-        { code: "TMM", name: "Tênis de Mesa Masculino", type: "chaveamento" },
-        { code: "TMF", name: "Tênis de Mesa Feminino", type: "chaveamento" },
-        { code: "TM", name: "Tênis Campo Masculino", type: "chaveamento" },
-        { code: "TF", name: "Tênis Campo Feminino", type: "chaveamento" },
-        { code: "XA", name: "Xadrez Absoluto", type: "chaveamento" },
-        { code: "ATM", name: "Atletismo Masculino", type: "atletismo" },
-        { code: "ATF", name: "Atletismo Feminino", type: "atletismo" },
-        { code: "NTA", name: "Natação Absoluto", type: "natacao" },
-        { code: "NTF", name: "Natação Feminino", type: "natacao" },
-        { code: "NTM", name: "Natação Masculino", type: "natacao" },
+        { code: "BM", short_code: "BM", edition_id: 1, name: "Basquete Masculino", type: "chaveamento" },
+        { code: "BF", short_code: "BF", edition_id: 1, name: "Basquete Feminino", type: "chaveamento" },
+        { code: "FM", short_code: "FM", edition_id: 1, name: "Futsal Masculino", type: "chaveamento" },
+        { code: "FF", short_code: "FF", edition_id: 1, name: "Futsal Feminino", type: "chaveamento" },
+        { code: "VM", short_code: "VM", edition_id: 1, name: "Vôlei Masculino", type: "chaveamento" },
+        { code: "VF", short_code: "VF", edition_id: 1, name: "Vôlei Feminino", type: "chaveamento" },
+        { code: "HM", short_code: "HM", edition_id: 1, name: "Handebol Masculino", type: "chaveamento" },
+        { code: "HF", short_code: "HF", edition_id: 1, name: "Handebol Feminino", type: "chaveamento" },
+        { code: "TMM", short_code: "TMM", edition_id: 1, name: "Tênis de Mesa Masculino", type: "chaveamento" },
+        { code: "TMF", short_code: "TMF", edition_id: 1, name: "Tênis de Mesa Feminino", type: "chaveamento" },
+        { code: "TM", short_code: "TM", edition_id: 1, name: "Tênis Campo Masculino", type: "chaveamento" },
+        { code: "TF", short_code: "TF", edition_id: 1, name: "Tênis Campo Feminino", type: "chaveamento" },
+        { code: "XA", short_code: "XA", edition_id: 1, name: "Xadrez Absoluto", type: "chaveamento" },
+        { code: "ATM", short_code: "ATM", edition_id: 1, name: "Atletismo Masculino", type: "atletismo" },
+        { code: "ATF", short_code: "ATF", edition_id: 1, name: "Atletismo Feminino", type: "atletismo" },
+        { code: "NTA", short_code: "NTA", edition_id: 1, name: "Natação Absoluto", type: "natacao" },
+        { code: "NTF", short_code: "NTF", edition_id: 1, name: "Natação Feminino", type: "natacao" },
+        { code: "NTM", short_code: "NTM", edition_id: 1, name: "Natação Masculino", type: "natacao" },
+    ]);
+
+    await knex("modalities").insert([
+        { code: "FM2", short_code: "FM", edition_id: 2, name: "Futsal Masculino", type: "chaveamento" },
+        { code: "VF2", short_code: "VF", edition_id: 2, name: "Vôlei Feminino", type: "chaveamento" },
     ]);
 
     await knex("teams").insert([
@@ -45,7 +60,7 @@ export async function seed(knex: Knex): Promise<void> {
         { name: "AKI" },
     ]);
 
-    await knex("time_slots").insert([
+    await knex("time_slots").insert(([
         { starts_at: "2026-10-31T11:00:00.000Z" },
         { starts_at: "2026-10-31T12:30:00.000Z" },
         { starts_at: "2026-10-31T14:00:00.000Z" },
@@ -70,7 +85,7 @@ export async function seed(knex: Knex): Promise<void> {
         { starts_at: "2026-11-02T19:30:00.000Z" },
         { starts_at: "2026-11-02T21:00:00.000Z" },
         { starts_at: "2026-11-02T22:30:00.000Z" },
-    ]);
+    ] as { starts_at: string }[]).map((slot) => ({ ...slot, edition_id: 1 })));
 
     await knex("venues").insert([
         { id: 1, name: "FEF", parent_id: null },

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useParams } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
+import EditionSelect from '../components/EditionSelect'
+import { useEdition } from '../contexts/edition'
 import BracketBuilder from '../components/bracket/BracketBuilder'
 import BracketView from '../components/bracket/BracketView'
 import Loading from '../components/Loading'
@@ -18,7 +20,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
         if (modality.type !== 'chaveamento') return
         let cancelled = false
 
-        Promise.all([getBracket(modality.code), getTeams(), getVenues(), getTimeSlots()])
+        Promise.all([getBracket(modality.code), getTeams(modality.edition_id), getVenues(), getTimeSlots(modality.edition_id)])
             .then(([bracket, allTeams, allVenues, allSlots]) => {
                 if (cancelled) return
                 setMatches(bracket)
@@ -33,7 +35,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
         return () => {
             cancelled = true
         }
-    }, [modality.code, modality.type])
+    }, [modality.code, modality.type, modality.edition_id])
 
     if (isEventsModality(modality.type))
         return (
@@ -59,14 +61,25 @@ function ModalityContent({ modality }: { modality: Modality }) {
 
 export default function BracketsPage() {
     const { code } = useParams()
-    const [modalities, setModalities] = useState<Modality[] | null>(null)
+    const navigate = useNavigate()
+    const { edition } = useEdition()
+    const [loaded, setLoaded] = useState<{ editionId: number, modalities: Modality[] } | null>(null)
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        getModalities()
-            .then(setModalities)
-            .catch(() => setError('Não foi possível carregar as modalidades.'))
-    }, [])
+        if (!edition)
+            return
+        let cancelled = false
+        getModalities(edition.id)
+            .then((modalities) => !cancelled && setLoaded({ editionId: edition.id, modalities }))
+            .catch(() => !cancelled && setError('Não foi possível carregar as modalidades.'))
+        return () => {
+            cancelled = true
+        }
+    }, [edition])
+
+    // Modalities of the edition being shown (null while another edition's list is still there).
+    const modalities = loaded && loaded.editionId === edition?.id ? loaded.modalities : null
 
     const selected = modalities?.find((m) => m.code === code?.toUpperCase()) ?? null
 
@@ -75,6 +88,7 @@ export default function BracketsPage() {
             <aside className="shrink-0 border-b border-white/10 bg-black/65 backdrop-blur md:w-64 md:border-r md:border-b-0">
                 <div className="px-5 pt-5 pb-3">
                     <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Chaveamentos</h1>
+                    <EditionSelect className="mt-3" onChange={() => navigate('/chaveamentos')} />
                 </div>
 
                 {error ? <p className="px-5 pb-4 text-sm text-red-300">{error}</p> : null}
@@ -92,7 +106,7 @@ export default function BracketsPage() {
                             }
                         >
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-xs font-bold tracking-wider">
-                                {modality.code}
+                                {modality.short_code}
                             </span>
                             <span className="truncate">{modality.name}</span>
                         </NavLink>
@@ -105,7 +119,7 @@ export default function BracketsPage() {
                 {selected ? (
                     <>
                         <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{selected.code}</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{selected.short_code}</p>
                             <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">{selected.name}</h2>
                         </div>
                         <ModalityContent key={selected.code} modality={selected} />

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Loading from '../components/Loading'
+import EditionSelect from '../components/EditionSelect'
+import { useEdition } from '../contexts/edition'
 import StandingsTable from '../components/standings/StandingsTable'
 import SummaryCards from '../components/standings/SummaryCards'
 import { getToken } from '../services/auth'
@@ -21,10 +23,14 @@ export default function StandingsPage() {
     const [saveError, setSaveError] = useState<string | null>(null)
     const [savingTeamId, setSavingTeamId] = useState<number | null>(null)
     const canEdit = Boolean(getToken())
+    const { edition } = useEdition()
+    const editionId = edition?.id
 
     useEffect(() => {
+        if (editionId === undefined)
+            return
         let cancelled = false
-        Promise.all([getStandings(), getMatches()])
+        Promise.all([getStandings(editionId), getMatches(editionId)])
             .then(([data, allMatches]) => {
                 if (cancelled) return
                 setStandings(data)
@@ -36,21 +42,23 @@ export default function StandingsPage() {
         return () => {
             cancelled = true
         }
-    }, [])
+    }, [editionId])
 
     // Saves the change, then reloads the table so the totals come from the server.
     const changeScoring = useCallback(async (teamId: number, scoring: TeamScoringInput) => {
+        if (editionId === undefined)
+            return
         setSaveError(null)
         setSavingTeamId(teamId)
         try {
-            await setTeamScoring(teamId, scoring)
-            setStandings(await getStandings())
+            await setTeamScoring(teamId, editionId, scoring)
+            setStandings(await getStandings(editionId))
         } catch (saveFailure) {
             setSaveError(errorMessage(saveFailure))
         } finally {
             setSavingTeamId(null)
         }
-    }, [])
+    }, [editionId])
 
     const modalities = standings?.modalities ?? []
     const inProgress = modalities.filter((m) => m.team_count > 0 && !m.finished && !m.error).length
@@ -61,6 +69,7 @@ export default function StandingsPage() {
             <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Pontuação</p>
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Máx e Mín</h1>
+                <EditionSelect className="mt-3 w-56" />
                 <p className="mt-1 max-w-2xl text-sm text-zinc-400">
                     Pontos de cada time por modalidade. Enquanto a chave ou as provas não terminam, a célula mostra a faixa de pontos possível e a faixa de colocação.
                     {canEdit ? ' O bônus de torcida e a penalidade podem ser alterados direto na tabela.' : ''}
@@ -85,7 +94,7 @@ export default function StandingsPage() {
                         <div className="rounded-2xl border border-amber-900/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
                             {errors.map((m) => (
                                 <p key={m.code}>
-                                    <span className="font-semibold">{m.code}</span>: {m.error}
+                                    <span className="font-semibold">{m.short_code}</span>: {m.error}
                                 </p>
                             ))}
                         </div>

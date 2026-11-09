@@ -6,7 +6,7 @@ import {
     OrganizationSummary,
     ValidationError,
 } from "../organizations/controller";
-import { AWARD_KINDS, AWARD_PLACEMENTS, Award, AwardKind, AwardPlacement } from "../../types/sports";
+import { AWARD_PLACEMENTS, Award, AwardKind, AwardPlacement } from "../../types/sports";
 
 export interface AwardView {
     id: number;
@@ -17,17 +17,20 @@ export interface AwardView {
     year: number;
     organization: OrganizationSummary;
     team: { id: number, name: string } | null;
+    /** The championship participation it was given in, if any. */
+    participation_id: number | null;
     recipients: { email: string, name: string, profile_photo_url: string | null }[];
 }
 
-/** Awards granted by an organization, of a team, or received by a user; newest first. */
-export async function listAwards(filter: { organizationId?: number, teamId?: number, email?: string }): Promise<AwardView[]> {
+/** Awards granted by an organization, of a team, of some participations, or received by a user; newest first. */
+export async function listAwards(filter: { organizationId?: number, teamId?: number, email?: string, participationIds?: number[] }): Promise<AwardView[]> {
     const query = db("awards")
         .select<Award[]>("*")
         .orderBy("year", "desc")
         .orderBy("id", "desc");
     if (filter.organizationId !== undefined) query.where({ organization_id: filter.organizationId });
     if (filter.teamId !== undefined) query.where({ sports_team_id: filter.teamId });
+    if (filter.participationIds !== undefined) query.whereIn("participation_id", filter.participationIds);
     if (filter.email !== undefined)
         query.whereIn("id", db("award_recipients").select("award_id").where({ user_email: filter.email }));
     const awards = await query;
@@ -57,6 +60,7 @@ export async function listAwards(filter: { organizationId?: number, teamId?: num
         year: award.year,
         organization: organizations.get(award.organization_id)!,
         team: award.sports_team_id !== null ? teamsById.get(award.sports_team_id) ?? null : null,
+        participation_id: award.participation_id ?? null,
         recipients: recipients
             .filter((recipient) => recipient.award_id === award.id)
             .map(({ email, name, profile_photo_url }) => ({ email, name, profile_photo_url })),
@@ -83,9 +87,9 @@ export interface CreateAwardInput {
 }
 
 /**
- * Creates an award. Team awards ("equipe", shown as a trophy) need a team of the granting
- * organization and are usually given to its whole roster; individual awards (a medal) may
- * mention a team. Either way, `recipients` lists who gets it on their profile.
+ * Creates an individual award (a medal) outside a championship, e.g. "Atleta Revelação" in the
+ * Melhores do Ano; it may mention a team. Awards given within a championship are created by the
+ * participations module.
  */
 export async function createAward(email: string, input: CreateAwardInput): Promise<AwardView> {
     const organizationId = Number(input.organization_id);
@@ -93,8 +97,10 @@ export async function createAward(email: string, input: CreateAwardInput): Promi
         throw new ValidationError("organization_id must be a positive integer");
     await assertCanManageSports(email, organizationId);
 
-    if (!AWARD_KINDS.includes(input.kind as AwardKind)) throw new ValidationError("kind must be individual or equipe");
-    const kind = input.kind as AwardKind;
+    // Team results are participations now (with placement and athletes); only individual awards are created here.
+    if (input.kind !== undefined && input.kind !== "individual")
+        throw new ValidationError("Team results are registered as participations");
+    const kind: AwardKind = "individual";
 
     const title = optionalText(input.title, "title", 80);
     if (title === null) throw new ValidationError("title is required");
@@ -113,7 +119,6 @@ export async function createAward(email: string, input: CreateAwardInput): Promi
         if (!team || team.organization_id !== organizationId)
             throw new ValidationError("sports_team_id must be a team of this organization");
     }
-    if (kind === "equipe" && teamId === null) throw new ValidationError("Team awards need a team");
 
     if (!Array.isArray(input.recipients) || input.recipients.length === 0 || input.recipients.some((item) => typeof item !== "string"))
         throw new ValidationError("recipients must be a non-empty array of emails");

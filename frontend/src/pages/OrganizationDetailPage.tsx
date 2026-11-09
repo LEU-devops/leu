@@ -215,6 +215,11 @@ export default function OrganizationDetailPage() {
                                         Gerenciar esportes
                                     </Link>
                                 ) : null}
+                                {organization.name !== 'LEU' ? (
+                                    <Link to={`/entidades/${organization.id}/copas`} className={MANAGE_BUTTON}>
+                                        Copas
+                                    </Link>
+                                ) : null}
                             </>
                         )}
                     />

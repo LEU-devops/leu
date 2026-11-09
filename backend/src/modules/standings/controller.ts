@@ -16,6 +16,8 @@ export interface StandingsCell {
 /** One column of the standings table. */
 export interface StandingsModality {
     code: string;
+    /** The code people see ("FM"); `code` is the internal key. */
+    short_code: string;
     name: string;
     type: ModalityType;
     team_count: number;
@@ -27,7 +29,7 @@ export interface StandingsModality {
 type ScoredModality = { column: StandingsModality; cells: Map<number, StandingsCell> };
 
 function emptyColumn(modality: Modality): StandingsModality {
-    return { code: modality.code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
+    return { code: modality.code, short_code: modality.short_code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
 }
 
 /** One row of the standings table. */
@@ -90,14 +92,25 @@ function scoreEventsModality(modality: Modality, teamIds: number[], events: Even
     return { column, cells };
 }
 
-/** The whole standings table: every team against every modality, with bonus, penalty and totals. */
-export async function getStandings(): Promise<Standings> {
-    const [modalities, teams, matches, registrations] = await Promise.all([
-        db("modalities").select("*").orderBy("name"),
-        db("teams").select("*").orderBy("name"),
-        db("matches").select("id", "modality_code", "round", "team_a_id", "team_b_id", "winner_id", "walkover"),
-        db("registrations").select("*"),
+/**
+ * The standings table of one edition: every team that takes part in it (in a bracket, a
+ * registration or with a scoring adjustment) against every modality, with bonus, penalty and totals.
+ */
+export async function getStandings(editionId: number): Promise<Standings> {
+    const modalities = await db("modalities").where({ edition_id: editionId }).select("*").orderBy("name");
+    const codes = modalities.map((modality) => modality.code);
+    const [matches, registrations, scoring] = await Promise.all([
+        db("matches").whereIn("modality_code", codes).select("id", "modality_code", "round", "team_a_id", "team_b_id", "winner_id", "walkover"),
+        db("registrations").whereIn("modality_code", codes).select("*"),
+        db("edition_team_scoring").where({ edition_id: editionId }).select("*"),
     ]);
+    const teamIds = new Set<number>([
+        ...matches.flatMap((m) => [m.team_a_id, m.team_b_id]).filter((id): id is number => id !== null),
+        ...registrations.map((r) => r.team_id),
+        ...scoring.map((s) => s.team_id),
+    ]);
+    const teams = await db("teams").whereIn("id", [...teamIds]).select("*").orderBy("name");
+    const scoringByTeam = new Map(scoring.map((s) => [s.team_id, s]));
     const eventsByModality = await loadEvents(db, modalities.filter((m) => isEventsModality(m.type)).map((m) => m.code));
 
     const scored = modalities.map((modality) =>
@@ -127,17 +140,19 @@ export async function getStandings(): Promise<Standings> {
                 }
             }
 
-            const earned = Boolean(team.bonus_torcida);
+            const adjustment = scoringByTeam.get(team.id);
+            const earned = Boolean(adjustment?.bonus_torcida);
+            const penalty = adjustment?.penalty_points ?? 0;
             const bonus = earned ? BONUS_TORCIDA_POINTS : 0;
-            total.min += bonus - team.penalty_points;
-            total.max += bonus - team.penalty_points;
+            total.min += bonus - penalty;
+            total.max += bonus - penalty;
 
             return {
                 id: team.id,
                 name: team.name,
                 modalities: cells,
                 bonus_torcida: { earned, points: bonus },
-                penalty_points: team.penalty_points,
+                penalty_points: penalty,
                 total,
             };
         }),

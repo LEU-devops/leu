@@ -1,7 +1,8 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/permission.middleware";
-import { getTeam, listTeams, NotFoundError, setTeamScoring, ValidationError } from "./controller";
+import { resolveEditionId } from "../editions/controller";
+import { getTeam, listTeams, NotFoundError, setTeamOrganization, setTeamScoring, ValidationError } from "./controller";
 
 const router = Router();
 
@@ -14,29 +15,27 @@ function parseId(raw: unknown): number {
     return id;
 }
 
-/** Public list of every team (with bonus_torcida and penalty_points), used to fill the bracket builder. */
-router.get("/", async (_req: Request, res: Response) => {
-    res.json(await listTeams());
+/** Public list of every Copa team, with its organization and its bonus_torcida/penalty_points in `?edition=<id>` (default: current). */
+router.get("/", async (req: Request, res: Response) => {
+    res.json(await listTeams(await resolveEditionId(req.query.edition)));
 });
 
-/** A single team, including its scoring adjustments (bonus_torcida, penalty_points). */
+/** A single team, with its scoring adjustments in `?edition=<id>`. */
 router.get("/:id", async (req: Request, res: Response) => {
-    res.json(await getTeam(parseId(req.params.id)));
-});
-
-// --- SCORING ADJUSTMENTS ---
-
-/** The scoring adjustments of a team: { id, name, bonus_torcida, penalty_points }. */
-router.get("/:id/scoring", async (req: Request, res: Response) => {
-    res.json(await getTeam(parseId(req.params.id)));
+    res.json(await getTeam(parseId(req.params.id), await resolveEditionId(req.query.edition)));
 });
 
 /**
- * Body: { "bonusTorcida": true, "penaltyPoints": 3 }. Both fields are optional, at least one is required;
- * the ones left out keep their value. Responds with the updated team.
+ * Body: { "bonusTorcida": true, "penaltyPoints": 3, "editionId"?: 2 }. Both fields are optional, at
+ * least one is required; the ones left out keep their value. Responds with the updated team.
  */
 router.put("/:id/scoring", ...canManage, async (req: Request, res: Response) => {
-    res.json(await setTeamScoring(parseId(req.params.id), req.body ?? {}));
+    res.json(await setTeamScoring(parseId(req.params.id), await resolveEditionId(req.body?.editionId), req.body ?? {}));
+});
+
+/** Body: { "organizationId": 3 | null }. Links the team to its AAA. */
+router.put("/:id/organization", ...canManage, async (req: Request, res: Response) => {
+    res.json(await setTeamOrganization(parseId(req.params.id), await resolveEditionId(undefined), req.body ?? {}));
 });
 
 // Translate the controller errors of this module into HTTP statuses.

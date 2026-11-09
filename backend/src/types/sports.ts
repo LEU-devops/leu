@@ -36,6 +36,8 @@ export interface Award {
     placement: AwardPlacement | null;
     competition: string | null;
     year: number;
+    /** Set when the award was given within a championship participation (MVP, destaque...). */
+    participation_id: number | null;
     created_at: string;
 }
 

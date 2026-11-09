@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Loading from '../components/Loading'
 import VenuesSection from '../components/admin/VenuesSection'
+import EditionsSection from '../components/admin/EditionsSection'
+import ModalitiesSection from '../components/admin/ModalitiesSection'
+import CopaTeamsSection from '../components/admin/CopaTeamsSection'
+import EditionSelect from '../components/EditionSelect'
+import { editionLabel, useEdition } from '../contexts/edition'
 import { createTimeSlot, deleteTimeSlot, getTimeSlots } from '../services/competition'
 import type { TimeSlot } from '../types/competition'
 
@@ -52,7 +57,8 @@ function groupByDay(slots: TimeSlot[]): DayGroup[] {
     return [...groups.values()].sort((a, b) => a.key.localeCompare(b.key))
 }
 
-function TimeSlotsSection() {
+/** Mounted with `key={editionId}`, so it reloads when another edition is picked. */
+function TimeSlotsSection({ editionId }: { editionId: number }) {
     const [slots, setSlots] = useState<TimeSlot[] | null>(null)
     const [date, setDate] = useState('')
     const [time, setTime] = useState('')
@@ -61,10 +67,10 @@ function TimeSlotsSection() {
     const [deletingId, setDeletingId] = useState<number | null>(null)
 
     useEffect(() => {
-        getTimeSlots()
+        getTimeSlots(editionId)
             .then(setSlots)
             .catch(() => setError('Não foi possível carregar os horários.'))
-    }, [])
+    }, [editionId])
 
     const days = useMemo(() => groupByDay(slots ?? []), [slots])
 
@@ -75,7 +81,7 @@ function TimeSlotsSection() {
         setError(null)
         setIsSaving(true)
         try {
-            const created = await createTimeSlot(startsAt.toISOString())
+            const created = await createTimeSlot(startsAt.toISOString(), editionId)
             setSlots((current) => [...(current ?? []), created].sort((a, b) => a.starts_at.localeCompare(b.starts_at)))
             // Keep the day and move on to the next slot, so a whole day can be typed in a row.
             setTime(splitLocal(new Date(startsAt.getTime() + SLOT_MINUTES * 60_000)).time)
@@ -155,6 +161,7 @@ function TimeSlotsSection() {
 }
 
 export default function AdminPage() {
+    const { edition } = useEdition()
     return (
         <main className="flex-1 space-y-6 p-4 md:p-8">
             <div>
@@ -162,7 +169,17 @@ export default function AdminPage() {
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Admin</h1>
             </div>
 
-            <TimeSlotsSection />
+            <EditionsSection />
+
+            <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-3">
+                <span className="text-sm text-zinc-300">Editando a edição</span>
+                <EditionSelect />
+                {edition ? <span className="text-xs text-zinc-500">Modalidades e horários abaixo são da {editionLabel(edition)}.</span> : null}
+            </div>
+
+            {edition ? <ModalitiesSection key={`m-${edition.id}`} editionId={edition.id} /> : null}
+            {edition ? <TimeSlotsSection key={`t-${edition.id}`} editionId={edition.id} /> : null}
+            <CopaTeamsSection />
             <VenuesSection />
         </main>
     )

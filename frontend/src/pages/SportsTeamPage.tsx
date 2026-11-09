@@ -12,6 +12,7 @@ import {
     deleteTeamStint,
     getSportsTeam,
     getSportsTeamPermissions,
+    getTeamParticipations,
     getTeamStints,
     renameSportsTeam,
     setSportsTeamRoster,
@@ -19,7 +20,9 @@ import {
     updateTeamStint,
 } from '../services/sports'
 import PeriodHistory from '../components/PeriodHistory'
-import type { SportsTeamDetail, SportsTeamMember, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
+import ParticipationCard from '../components/participations/ParticipationCard'
+import NewParticipationForm from '../components/participations/NewParticipationForm'
+import type { Participation, SportsTeamDetail, SportsTeamMember, SportsTeamPermissions, StintPeriod, StintRole } from '../types/sports'
 import { organizationBackground } from '../utils/gradient'
 
 const INPUT_CLASS =
@@ -112,17 +115,20 @@ export default function SportsTeamPage() {
     const [status, setStatus] = useState<{ kind: 'error' | 'success', text: string } | null>(null)
     const [renaming, setRenaming] = useState<string | null>(null)
     const [stints, setStints] = useState<StintPeriod[]>([])
+    const [participations, setParticipations] = useState<Participation[]>([])
+    const [creatingParticipation, setCreatingParticipation] = useState(false)
 
     useEffect(() => {
         if (invalidId)
             return
         let cancelled = false
-        Promise.all([getSportsTeam(id), getSportsTeamPermissions(id), getTeamStints(id)])
-            .then(([data, allowed, history]) => {
+        Promise.all([getSportsTeam(id), getSportsTeamPermissions(id), getTeamStints(id), getTeamParticipations(id)])
+            .then(([data, allowed, history, played]) => {
                 if (cancelled)
                     return
                 setTeam(data)
                 setStints(history)
+                setParticipations(played)
                 setPermissions(allowed)
             })
             .catch(() => !cancelled && setLoadError('Não foi possível carregar o time.'))
@@ -208,6 +214,8 @@ export default function SportsTeamPage() {
     }
 
     const accent = team?.organization.accent_color ?? null
+    /** Awards outside a championship (the others are shown in their participation). */
+    const looseAwards = team?.awards.filter((award) => award.participation_id === null) ?? []
     const dms = team?.members.filter((member) => member.is_dm) ?? []
     const athletes = team?.members.filter((member) => member.is_athlete) ?? []
 
@@ -336,9 +344,44 @@ export default function SportsTeamPage() {
                     )}
 
                     <section className="space-y-4">
-                        <SectionHeading title="Premiações" count={team.awards.length} accent={accent} />
-                        {team.awards.length > 0
-                            ? <ul className="space-y-2">{team.awards.map((award) => <AwardRow key={award.id} award={award} />)}</ul>
+                        <SectionHeading title="Participações" count={participations.length} accent={accent} />
+                        {permissions.canManageRoster && !draft ? (
+                            creatingParticipation ? (
+                                <NewParticipationForm
+                                    teamId={team.id}
+                                    roster={team.members.filter((member) => member.is_athlete)}
+                                    onCancel={() => setCreatingParticipation(false)}
+                                    onCreated={(created) => {
+                                        setParticipations((list) => [created, ...list].sort((a, b) => b.year - a.year))
+                                        setCreatingParticipation(false)
+                                    }}
+                                />
+                            ) : (
+                                <button type="button" onClick={() => setCreatingParticipation(true)} className="rounded-xl border border-white/15 px-4 py-2 text-sm text-zinc-200 transition hover:bg-white/5">
+                                    + Registrar campeonato
+                                </button>
+                            )
+                        ) : null}
+                        {participations.length > 0 ? (
+                            <div className="space-y-3">
+                                {participations.map((participation) => (
+                                    <ParticipationCard
+                                        key={participation.id}
+                                        participation={participation}
+                                        canEdit={permissions.canManageRoster}
+                                        suggestions={team.members.filter((member) => member.is_athlete)}
+                                        onChange={(updated) => setParticipations((list) => list.map((item) => (item.id === updated.id ? updated : item)))}
+                                        onDeleted={() => setParticipations((list) => list.filter((item) => item.id !== participation.id))}
+                                    />
+                                ))}
+                            </div>
+                        ) : <p className="text-center text-sm text-zinc-500">Nenhum campeonato registrado.</p>}
+                    </section>
+
+                    <section className="space-y-4">
+                        <SectionHeading title="Outras premiações" count={looseAwards.length} accent={accent} />
+                        {looseAwards.length > 0
+                            ? <ul className="space-y-2">{looseAwards.map((award) => <AwardRow key={award.id} award={award} />)}</ul>
                             : <p className="text-center text-sm text-zinc-500">Nenhuma premiação ainda.</p>}
                         {permissions.canManageTeam ? (
                             <p className="text-center text-xs text-zinc-500">

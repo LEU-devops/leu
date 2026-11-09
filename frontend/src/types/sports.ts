@@ -31,7 +31,39 @@ export interface Award {
     year: number
     organization: OrganizationSummary
     team: { id: number, name: string } | null
+    /** The championship participation it was given in (MVP, destaque...), if any. */
+    participation_id: number | null
     recipients: { email: string, name: string, profile_photo_url: string | null }[]
+}
+
+export interface Athlete {
+    email: string
+    name: string
+    profile_photo_url: string | null
+}
+
+/**
+ * A team in a championship. `externo`: any championship, result typed by the DMs. `copa`: an AAA in a
+ * modality of a LEU Copa edition, result read live from the Copa standings.
+ */
+export interface Participation {
+    /** null for a Copa entry nobody has filled in yet. */
+    id: number | null
+    kind: 'externo' | 'copa'
+    organization: OrganizationSummary
+    team: { id: number, name: string } | null
+    /** Championship name; for the Copa, the edition name. */
+    competition: string
+    year: number
+    edition: { id: number, name: string, year: number } | null
+    modality: { code: string, short_code: string, name: string } | null
+    copa_team: { id: number, name: string } | null
+    /** 1 = ouro, 2 = prata, 3 = bronze, 4+ = position; null = participação (or a Copa still running). */
+    placement: number | null
+    position_range: { min: number, max: number } | null
+    in_progress: boolean
+    athletes: Athlete[]
+    awards: Award[]
 }
 
 export interface SportsTeamDetail extends SportsTeam {
@@ -91,4 +123,6 @@ export interface PublicProfile {
     /** Current and past periods as athlete or DM. */
     team_stints: (Period & { team: { id: number, name: string }, organization: OrganizationSummary, role: StintRole })[]
     awards: Award[]
+    /** Championships played (Copas and others), with results and the awards given there. */
+    participations: Participation[]
 }

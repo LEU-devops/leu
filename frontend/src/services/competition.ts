@@ -1,14 +1,55 @@
-import type { BracketMatch, EventFlags, Modality, ModalityEvent, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { BracketMatch, CopaEdition, EventFlags, Modality, ModalityEvent, ModalityType, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
 import type { OrganizationHierarchy } from '../types/organizations'
 import type { EventsStandings, Standings } from '../types/standings'
 import { request } from './api'
 
-export function getModalities(): Promise<Modality[]> {
-    return request('/modalities')
+/** `?edition=` for the Copa listings; without it the API uses the current edition. */
+function editionQuery(editionId?: number): string {
+    return editionId === undefined ? '' : `?edition=${editionId}`
 }
 
-export function getTeams(): Promise<Team[]> {
-    return request('/teams')
+// --- EDITIONS ---
+
+export function getEditions(): Promise<CopaEdition[]> {
+    return request('/copa-editions')
+}
+
+export function createEdition(input: { name: string, year: number, copyModalitiesFrom: number | null, makeCurrent: boolean }): Promise<CopaEdition> {
+    return request('/copa-editions', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export function updateEdition(id: number, changes: { name?: string, year?: number, isCurrent?: true }): Promise<CopaEdition> {
+    return request(`/copa-editions/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
+}
+
+export function deleteEdition(id: number): Promise<null> {
+    return request(`/copa-editions/${id}`, { method: 'DELETE' })
+}
+
+// --- MODALITIES AND TEAMS ---
+
+export function getModalities(editionId?: number): Promise<Modality[]> {
+    return request(`/modalities${editionQuery(editionId)}`)
+}
+
+/** `code` is the short code people see ("FM"). */
+export function createModality(editionId: number, input: { code: string, name: string, type: ModalityType }): Promise<Modality> {
+    return request('/modalities', { method: 'POST', body: JSON.stringify({ ...input, editionId }) })
+}
+
+/** Only for a modality without bracket, registrations or events. */
+export function deleteModality(code: string): Promise<null> {
+    return request(`/modalities/${code}`, { method: 'DELETE' })
+}
+
+/** Every Copa team, with its bonus and penalty in the edition. */
+export function getTeams(editionId?: number): Promise<Team[]> {
+    return request(`/teams${editionQuery(editionId)}`)
+}
+
+/** Links a Copa team to its AAA (null unlinks). */
+export function setTeamOrganization(teamId: number, organizationId: number | null): Promise<Team> {
+    return request(`/teams/${teamId}/organization`, { method: 'PUT', body: JSON.stringify({ organizationId }) })
 }
 
 export function getOrganizations(): Promise<OrganizationHierarchy[]> {
@@ -23,21 +64,21 @@ export function getVenues(): Promise<Venue[]> {
     return request('/venues')
 }
 
-export function getTimeSlots(): Promise<TimeSlot[]> {
-    return request('/time-slots')
+export function getTimeSlots(editionId?: number): Promise<TimeSlot[]> {
+    return request(`/time-slots${editionQuery(editionId)}`)
 }
 
-export function createTimeSlot(startsAt: string): Promise<TimeSlot> {
-    return request('/time-slots', { method: 'POST', body: JSON.stringify({ startsAt }) })
+export function createTimeSlot(startsAt: string, editionId: number): Promise<TimeSlot> {
+    return request('/time-slots', { method: 'POST', body: JSON.stringify({ startsAt, editionId }) })
 }
 
 export function deleteTimeSlot(id: number): Promise<void> {
     return request(`/time-slots/${id}`, { method: 'DELETE' })
 }
 
-/** Every match of every modality, scheduled ones first. */
-export function getMatches(): Promise<ScheduledMatch[]> {
-    return request('/matches')
+/** Every match of every modality of the edition, scheduled ones first. */
+export function getMatches(editionId?: number): Promise<ScheduledMatch[]> {
+    return request(`/matches${editionQuery(editionId)}`)
 }
 
 export function getBracket(code: string): Promise<BracketMatch[]> {
@@ -89,8 +130,8 @@ export function setMatchSchedule(code: string, matchId: number, schedule: MatchS
 }
 
 /** The "Máx e Mín" table: every team's points (or point range) in every modality, with totals. */
-export function getStandings(): Promise<Standings> {
-    return request('/standings')
+export function getStandings(editionId?: number): Promise<Standings> {
+    return request(`/standings${editionQuery(editionId)}`)
 }
 
 export interface TeamScoringInput {
@@ -98,11 +139,11 @@ export interface TeamScoringInput {
     penaltyPoints?: number
 }
 
-/** Updates a team's supporters bonus and/or penalty points. Responds with the updated team. */
-export function setTeamScoring(teamId: number, scoring: TeamScoringInput): Promise<Team> {
+/** Updates a team's supporters bonus and/or penalty points in an edition. Responds with the updated team. */
+export function setTeamScoring(teamId: number, editionId: number, scoring: TeamScoringInput): Promise<Team> {
     return request(`/teams/${teamId}/scoring`, {
         method: 'PUT',
-        body: JSON.stringify(scoring),
+        body: JSON.stringify({ ...scoring, editionId }),
     })
 }
 

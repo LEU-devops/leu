@@ -16,6 +16,8 @@ import standingsRoutes from "./modules/standings/routes";
 import sportsTeamsRoutes from "./modules/sports-teams/routes";
 import awardsRoutes from "./modules/awards/routes";
 import usersRoutes from "./modules/users/routes";
+import editionsRoutes from "./modules/editions/routes";
+import participationsRoutes from "./modules/participations/routes";
 
 import { errorMiddleware } from "./middlewares/error.middleware";
 config({ quiet: true });
@@ -67,6 +69,8 @@ app.use("/standings", standingsRoutes);
 app.use("/sports-teams", sportsTeamsRoutes);
 app.use("/awards", awardsRoutes);
 app.use("/users", usersRoutes);
+app.use("/copa-editions", editionsRoutes);
+app.use("/participations", participationsRoutes);
 
 app.use(errorMiddleware);
 

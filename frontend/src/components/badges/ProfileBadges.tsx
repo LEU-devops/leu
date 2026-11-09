@@ -6,7 +6,7 @@ import { roleLabel } from '../../utils/roles'
 import { organizationBackground } from '../../utils/gradient'
 import OrganizationLogo from '../OrganizationLogo'
 import { ColumnsIcon, JerseyIcon, MedalIcon, StarIcon, TrophyIcon, WhistleIcon } from './BadgeIcons'
-import { PLACEMENT_COLORS, PLACEMENT_LABELS } from '../../utils/awards'
+import { PLACEMENT_COLORS, PLACEMENT_LABELS, placementColor, placementLabel } from '../../utils/awards'
 
 type BadgeGroup = 'Gestão' | 'Entidades' | 'Times' | 'Premiações' | 'Conquistas'
 
@@ -167,6 +167,26 @@ function computeBadges(profile: PublicProfile): Badge[] {
         })
     }
 
+    // Podiums in championships (Copas and others): a trophy in the medal color.
+    for (const participation of profile.participations) {
+        if (participation.placement === null || participation.placement > 3)
+            continue
+        const color = placementColor(participation.placement)
+        const what = participation.kind === 'copa' ? participation.modality?.name : participation.team?.name
+        badges.push({
+            key: `participation-${participation.id}`,
+            group: 'Premiações',
+            label: `${participation.competition} ${participation.year}`,
+            detail: [placementLabel(participation.placement), what, participation.organization.name].filter(Boolean).join(' · '),
+            icon: <TrophyIcon color={color} />,
+            background: DARK_TILE,
+            ring: color,
+            to: participation.kind === 'copa'
+                ? `/entidades/${participation.organization.id}/copas`
+                : participation.team ? `/times/${participation.team.id}` : undefined,
+        })
+    }
+
     const athleteTeams = new Set(profile.team_stints.filter((stint) => stint.role === 'atleta').map((stint) => stint.team.id))
     if (athleteTeams.size >= 2) {
         badges.push({
@@ -181,6 +201,7 @@ function computeBadges(profile: PublicProfile): Badge[] {
     }
 
     const golds = profile.awards.filter((award) => award.placement === 'ouro').length
+        + profile.participations.filter((participation) => participation.placement === 1).length
     if (golds >= 2) {
         badges.push({
             key: 'multicampeao',

@@ -5,6 +5,7 @@ import { getOrganizations } from '../services/competition'
 import type { OrganizationHierarchy, OrganizationMember } from '../types/organizations'
 import type { SportsTeam } from '../types/sports'
 import { getSportsTeams } from '../services/sports'
+import EditionProvider from '../components/EditionProvider'
 
 const publicLinks = [
     { to: '/home', label: 'Home' },
@@ -272,7 +273,9 @@ export default function AppLayout() {
             </header>
 
             <div className="flex min-h-0 flex-1 flex-col">
-                <Outlet />
+                <EditionProvider>
+                    <Outlet />
+                </EditionProvider>
             </div>
         </div>
     )

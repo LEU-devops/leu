@@ -14,6 +14,7 @@ import OrganizationMembersPage from './pages/OrganizationMembersPage'
 import OrganizationIdentityPage from './pages/OrganizationIdentityPage'
 import OrganizationSportsPage from './pages/OrganizationSportsPage'
 import SportsTeamPage from './pages/SportsTeamPage'
+import OrganizationCopasPage from './pages/OrganizationCopasPage'
 import PublicProfilePage from './pages/PublicProfilePage'
 import ProfilePage from './pages/ProfilePage'
 
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/entidades/:id/membros" element={<OrganizationMembersPage />} />
         <Route path="/entidades/:id/identidade" element={<OrganizationIdentityPage />} />
         <Route path="/entidades/:id/esportes" element={<OrganizationSportsPage />} />
+        <Route path="/entidades/:id/copas" element={<OrganizationCopasPage />} />
         <Route path="/times/:id" element={<SportsTeamPage />} />
         <Route path="/pessoas/:email" element={<PublicProfilePage />} />
         <Route path="/perfil" element={<ProfilePage />} />

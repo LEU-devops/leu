@@ -13,13 +13,13 @@ export class NotFoundError extends Error {
     name = "Not Found Error";
 }
 
-/** Every base time slot in chronological order. */
-export async function listTimeSlots(): Promise<TimeSlot[]> {
-    return db("time_slots").select("*").orderBy("starts_at");
+/** Base time slots of an edition in chronological order. */
+export async function listTimeSlots(editionId: number): Promise<TimeSlot[]> {
+    return db("time_slots").where({ edition_id: editionId }).select("*").orderBy("starts_at");
 }
 
 /** Body: { "startsAt": "2026-10-31T16:30:00.000Z" }. The time is normalized to ISO UTC before storing. */
-export async function createTimeSlot(input: { startsAt?: unknown }): Promise<TimeSlot> {
+export async function createTimeSlot(editionId: number, input: { startsAt?: unknown }): Promise<TimeSlot> {
     const date = typeof input.startsAt === "string" ? new Date(input.startsAt) : new Date(NaN);
     if (Number.isNaN(date.getTime()))
         throw new ValidationError("startsAt must be an ISO 8601 date string");
@@ -28,8 +28,8 @@ export async function createTimeSlot(input: { startsAt?: unknown }): Promise<Tim
     if (await db("time_slots").where({ starts_at: startsAt }).first())
         throw new ConflictError("This time slot already exists");
 
-    const [{ id }] = await db("time_slots").insert({ starts_at: startsAt }).returning("id");
-    return { id, starts_at: startsAt };
+    const [{ id }] = await db("time_slots").insert({ starts_at: startsAt, edition_id: editionId }).returning("id");
+    return { id, starts_at: startsAt, edition_id: editionId };
 }
 
 export async function deleteTimeSlot(id: number): Promise<void> {

@@ -56,15 +56,30 @@ export interface ModalityEvent extends EventFlags {
     results: EventEntry[]
 }
 
+/** One Copa (e.g. "Copa Eng" 2026). Exactly one is current: the default of every Copa page. */
+export interface CopaEdition {
+    id: number
+    name: string
+    year: number
+    is_current: boolean
+}
+
 export interface Modality {
+    /** Internal key, unique across editions: use it in URLs and API calls. */
     code: string
+    /** The code people see ("FM"), unique within the edition. */
+    short_code: string
+    edition_id: number
     name: string
     type: ModalityType
 }
 
+/** An AAA as it appears in the Copas, with its scoring adjustments in the edition it was loaded for. */
 export interface Team {
     id: number
     name: string
+    /** The AAA (organization) this Copa team is, when linked. */
+    organization_id: number | null
     /** Supporters ("torcida") bonus earned. Used by the scoring page. */
     bonus_torcida: boolean
     /** Points subtracted from the team's total (0 = none). Used by the scoring page. */
@@ -82,6 +97,7 @@ export interface Venue {
 /** A reference start time of the event, as returned by GET /time-slots. */
 export interface TimeSlot {
     id: number
+    edition_id: number
     starts_at: string
 }
 

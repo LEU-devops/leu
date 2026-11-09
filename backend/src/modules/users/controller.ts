@@ -2,6 +2,7 @@ import { db } from "../../services/db";
 import { AwardView, listAwards } from "../awards/controller";
 import { NotFoundError, organizationSummaries, OrganizationSummary, OrganizationRole } from "../organizations/controller";
 import { StintRole } from "../../types/sports";
+import { listParticipations, ParticipationView } from "../participations/controller";
 
 interface Period {
     started_on: string;
@@ -19,6 +20,8 @@ export interface PublicProfile {
     /** Every period as athlete or DM of a team, current and past. */
     team_stints: (Period & { team: { id: number, name: string }, organization: OrganizationSummary, role: StintRole })[];
     awards: AwardView[];
+    /** Championships played (Copas and others), with results and the awards given there. */
+    participations: ParticipationView[];
 }
 
 /** What anyone can see of a user: no RA/CPF. Badges and the timeline are derived from this on the frontend. */
@@ -64,5 +67,6 @@ export async function getPublicProfile(email: string): Promise<PublicProfile> {
             ended_on: stint.ended_on,
         })),
         awards: await listAwards({ email }),
+        participations: await listParticipations({ email }),
     };
 }

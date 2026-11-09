@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response, Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/permission.middleware";
+import { resolveEditionId } from "../editions/controller";
 import {
     clearMatchResult,
     ConflictError,
     createBracket,
     createModality,
+    deleteModality,
     getBracket,
     getModality,
     listModalities,
@@ -19,12 +21,20 @@ const router = Router();
 const canManage = [authMiddleware, requirePermission("criar-chaveamento")];
 
 // --- MODALITIES ---
-router.get("/", async (_req: Request, res: Response) => {
-    res.json(await listModalities());
+/** Modalities of `?edition=<id>` (default: the current edition). */
+router.get("/", async (req: Request, res: Response) => {
+    res.json(await listModalities(await resolveEditionId(req.query.edition)));
 });
 
+/** Body: `{ code, name, type, editionId? }` (default: the current edition). */
 router.post("/", ...canManage, async (req: Request, res: Response) => {
-    res.status(201).json(await createModality(req.body ?? {}));
+    res.status(201).json(await createModality(await resolveEditionId(req.body?.editionId), req.body ?? {}));
+});
+
+/** Only when the modality has no bracket, registrations or events. */
+router.delete("/:code", ...canManage, async (req: Request, res: Response) => {
+    await deleteModality(String(req.params.code).toUpperCase());
+    res.sendStatus(204);
 });
 
 router.get("/:code", async (req: Request, res: Response) => {

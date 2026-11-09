@@ -20,7 +20,7 @@
 - [x] Times em que o aluno joga
 - [ ] Histórico de times em que jogou
 - [x] Premiações no perfil (ex: Ouro Vôlei Masc Copa Bixo 2025, Atleta Destaque Vôlei Masc 2026)
-- [ ] Histórico de participação nas copas (modalidades e resultados)
+- [x] Histórico de participação nas copas (modalidades e resultados)
 - [ ] Selo de membro do ClubLEU
 - [x] Cargos ocupados (gestão da LEU, AAA, DM)
 - [ ] Foto e redes sociais
@@ -45,7 +45,7 @@
 - [ ] Súmula digital dos jogos
 - [ ] Resultados em tempo real
 - [ ] Geração automática da tabela de jogos (disponibilidade de quadra e restrições de modalidades)
-- [ ] Premiação automática no perfil dos atletas ao fim da copa
+- [x] Premiação automática no perfil dos atletas ao fim da copa
 - [ ] Página da AAA na copa (jogos, resultados, pontuação)
 
 ### Copa Social

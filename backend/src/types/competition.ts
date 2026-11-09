@@ -13,19 +13,44 @@ export function isEventsModality(type: ModalityType): type is EventsModalityType
     return (EVENTS_MODALITY_TYPES as readonly ModalityType[]).includes(type);
 }
 
+/** Row shape of `copa_editions`: one Copa (e.g. "Copa Eng" 2026). Exactly one is current. */
+export interface CopaEdition {
+    id: number;
+    name: string;
+    year: number;
+    is_current: boolean;
+}
+
 /** Row shape of the `modalities` table. */
 export interface Modality {
+    /** Internal key, unique across editions (used in URLs and by matches/events/registrations). */
     code: string;
+    /** The code people see ("FM"), unique within the edition. */
+    short_code: string;
+    edition_id: CopaEdition["id"];
     name: string;
     type: ModalityType;
 }
 
-/** Row shape of the `teams` table. */
+/** Row shape of the `teams` table: an AAA as it appears in the Copas, linked to its organization. */
 export interface Team {
     id: number;
     name: string;
+    organization_id: number | null;
+}
+
+/** Row shape of `edition_team_scoring`: adjustments to a team's total in one edition. */
+export interface EditionTeamScoring {
+    edition_id: CopaEdition["id"];
+    team_id: Team["id"];
     bonus_torcida: boolean;      // supporters ("torcida") bonus earned
-    penalty_points: number;  // points subtracted from the team's total (0 = none)
+    penalty_points: number;      // points subtracted from the team's total (0 = none)
+}
+
+/** A team with its scoring adjustments in one edition, as the API returns it. */
+export interface TeamWithScoring extends Team {
+    bonus_torcida: boolean;
+    penalty_points: number;
 }
 
 /** Row shape of the `venues` table. */
@@ -38,6 +63,7 @@ export interface Venue {
 /** Row shape of the `time_slots` table: a reference start time of the event. */
 export interface TimeSlot {
     id: number;
+    edition_id: CopaEdition["id"];
     starts_at: string; // ISO 8601
 }
 
@@ -105,8 +131,10 @@ export const MAX_BRACKET_TEAMS = 16;
 
 declare module "knex/types/tables" {
     interface Tables {
+        copa_editions: CopaEdition;
         modalities: Modality;
         teams: Team;
+        edition_team_scoring: EditionTeamScoring;
         venues: Venue;
         matches: Match;
         time_slots: TimeSlot;

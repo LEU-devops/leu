@@ -109,7 +109,7 @@ export async function getEventsView(code: string): Promise<EventsView> {
         db("registrations as r").join("teams as t", "t.id", "r.team_id").where("r.modality_code", code).orderBy("t.name").select("t.*"),
         loadEvents(db, [code]).then((m) => m.get(code)!),
     ]);
-    const normalizedTeams: Team[] = teams.map((t) => ({ ...t, bonus_torcida: Boolean(t.bonus_torcida) }));
+    const normalizedTeams: Team[] = teams;
     return {
         modality,
         teams: normalizedTeams,

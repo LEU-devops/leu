@@ -5,20 +5,20 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import Loading from '../components/Loading'
 import Select from '../components/Select'
 import { UserAvatar, UserSearch } from '../components/UserSearch'
-import { MedalIcon, TrophyIcon } from '../components/badges/BadgeIcons'
+import { MedalIcon } from '../components/badges/BadgeIcons'
 import { PLACEMENT_COLORS, PLACEMENT_LABELS } from '../utils/awards'
 import { getOrganization } from '../services/competition'
 import { getOrganizationPermissions } from '../services/organizations'
 import { createAward, createSportsTeam, deleteAward, getAwards, getSportsTeams, sportsErrorMessage } from '../services/sports'
 import type { OrganizationHierarchy } from '../types/organizations'
-import type { Award, AwardKind, AwardPlacement, SportsTeam } from '../types/sports'
+import type { Award, AwardPlacement, SportsTeam } from '../types/sports'
 
 const INPUT_CLASS =
     'w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-red-600'
 const PRIMARY_BUTTON =
     'rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40'
 
-const TITLE_SUGGESTIONS = ['Campeão', 'Vice-campeão', 'Terceiro lugar', 'Atleta Destaque', 'Atleta Revelação', 'Artilheiro(a)', 'MVP', 'Melhor Goleiro(a)']
+const TITLE_SUGGESTIONS = ['Atleta Destaque', 'Atleta Revelação', 'Artilheiro(a)', 'MVP', 'Melhor Goleiro(a)']
 const COMPETITION_SUGGESTIONS = ['Copa Bixo', 'Copa Eng', 'TUSCA', 'InterGestões', 'Melhores do Ano', 'Jubileu']
 
 type PlacementChoice = AwardPlacement | 'nenhuma'
@@ -85,9 +85,8 @@ function NewTeamForm({ organizationId, onCreated }: { organizationId: number, on
 }
 
 function NewAwardForm({ organization, teams, onCreated }: { organization: OrganizationHierarchy, teams: SportsTeam[], onCreated: (award: Award) => void }) {
-    const [kind, setKind] = useState<AwardKind>('equipe')
     const [title, setTitle] = useState('')
-    const [placement, setPlacement] = useState<PlacementChoice>('ouro')
+    const [placement, setPlacement] = useState<PlacementChoice>('nenhuma')
     const [competition, setCompetition] = useState('')
     const [year, setYear] = useState(String(new Date().getFullYear()))
     const [teamId, setTeamId] = useState<number | ''>('')
@@ -98,25 +97,9 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
 
     const team = teams.find((row) => row.id === teamId) ?? null
 
-    function chooseTeam(id: number | '', forKind: AwardKind = kind) {
-        setTeamId(id)
-        // A team award goes to the whole roster by default; unchecking leaves someone out.
-        if (forKind === 'equipe') {
-            const roster = teams.find((row) => row.id === id)?.members ?? []
-            setRecipients(roster.map(({ email, name, profile_photo_url }) => ({ email, name, profile_photo_url })))
-        }
-    }
-
-    function chooseKind(next: AwardKind) {
-        setKind(next)
-        setRecipients([])
-        if (next === 'equipe' && teamId !== '')
-            chooseTeam(teamId, next)
-    }
-
     const yearNumber = Number(year)
     const valid = title.trim().length > 0 && Number.isInteger(yearNumber) && yearNumber >= 1950 && yearNumber <= 2100
-        && recipients.length > 0 && (kind === 'individual' || team !== null)
+        && recipients.length > 0
 
     async function save() {
         setSaving(true)
@@ -124,7 +107,7 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
         try {
             const award = await createAward({
                 organization_id: organization.id,
-                kind,
+                kind: 'individual',
                 title: title.trim(),
                 placement: placement === 'nenhuma' ? null : placement,
                 competition: competition.trim() || null,
@@ -134,7 +117,7 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
             })
             onCreated(award)
             setTitle('')
-            setRecipients(kind === 'equipe' && team ? team.members.map(({ email, name, profile_photo_url }) => ({ email, name, profile_photo_url })) : [])
+            setRecipients([])
             setConfirming(false)
         } catch (err) {
             setError(sportsErrorMessage(err))
@@ -145,27 +128,13 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
     }
 
     const color = PLACEMENT_COLORS[placement === 'nenhuma' ? 'none' : placement]
-    const rosterEmails = new Set(team?.members.map((member) => member.email) ?? [])
-    const extraRecipients = recipients.filter((recipient) => !rosterEmails.has(recipient.email))
 
     return (
         <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-                {(['equipe', 'individual'] as const).map((option) => (
-                    <button
-                        key={option}
-                        type="button"
-                        onClick={() => chooseKind(option)}
-                        className={`flex items-center gap-3 rounded-2xl border px-3 py-2 text-left text-sm transition ${kind === option ? 'border-red-600 bg-red-950/30 text-zinc-50' : 'border-white/10 text-zinc-400 hover:bg-white/5'}`}
-                    >
-                        {option === 'equipe' ? <TrophyIcon color={color} className="h-7 w-7" /> : <MedalIcon color={color} className="h-7 w-7" />}
-                        <span>
-                            <span className="block font-semibold">{option === 'equipe' ? 'Equipe' : 'Individual'}</span>
-                            <span className="block text-[11px] text-zinc-500">{option === 'equipe' ? 'Troféu para o elenco de um time' : 'Medalha para uma ou mais pessoas'}</span>
-                        </span>
-                    </button>
-                ))}
-            </div>
+            <p className="text-xs text-zinc-500">
+                Medalha para uma ou mais pessoas, fora de um campeonato (ex.: Atleta Revelação nos Melhores do Ano). Resultados de equipe e premiações dentro de um campeonato
+                (MVP, destaque) ficam na participação, na página do time{organization.name !== 'LEU' ? ' ou em Copas' : ''}.
+            </p>
 
             <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Título">
@@ -182,49 +151,24 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
                 <Field label="Ano">
                     <input type="number" min={1950} max={2100} value={year} onChange={(event) => setYear(event.target.value)} className={INPUT_CLASS} />
                 </Field>
-                <Field label={kind === 'equipe' ? 'Time' : 'Time (opcional)'}>
+                <Field label="Time (opcional)">
                     <Select
                         value={teamId}
                         placeholder={teams.length === 0 ? 'Nenhum time cadastrado' : 'Selecione...'}
                         options={[
-                            ...(kind === 'individual' ? [{ value: 0, label: 'Nenhum time' }] : []),
+                            { value: 0, label: 'Nenhum time' },
                             ...teams.map((row) => ({ value: row.id, label: row.name })),
                         ]}
-                        onChange={(value) => chooseTeam(value === 0 ? '' : value)}
+                        onChange={(value) => setTeamId(value === 0 ? '' : value)}
                     />
                 </Field>
             </div>
 
             <div className="space-y-2">
                 <span className="text-xs text-zinc-400">Premiados ({recipients.length})</span>
-                {kind === 'equipe' && team ? (
-                    <ul className="grid gap-1 sm:grid-cols-2">
-                        {team.members.map((member) => {
-                            const checked = recipients.some((recipient) => recipient.email === member.email)
-                            return (
-                                <li key={member.email}>
-                                    <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1 text-sm text-zinc-200 hover:bg-white/5">
-                                        <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            onChange={() => setRecipients(checked
-                                                ? recipients.filter((recipient) => recipient.email !== member.email)
-                                                : [...recipients, { email: member.email, name: member.name, profile_photo_url: member.profile_photo_url }])}
-                                            className="accent-red-600"
-                                        />
-                                        {member.name}
-                                        {member.is_dm ? <span className="text-[11px] text-zinc-500">DM</span> : null}
-                                    </label>
-                                </li>
-                            )
-                        })}
-                    </ul>
-                ) : null}
-                {kind === 'equipe' && team && team.members.length === 0 ? <p className="text-xs text-zinc-500">Este time ainda não tem elenco.</p> : null}
-
-                {(kind === 'individual' ? recipients : extraRecipients).length > 0 ? (
+                {recipients.length > 0 ? (
                     <ul className="flex flex-wrap gap-2">
-                        {(kind === 'individual' ? recipients : extraRecipients).map((recipient) => (
+                        {recipients.map((recipient) => (
                             <li key={recipient.email} className="flex items-center gap-2 rounded-full border border-white/10 bg-black/30 py-1 pl-1 pr-3 text-sm text-zinc-200">
                                 <span className="[&>*]:h-6 [&>*]:w-6 [&>*]:text-[9px]"><UserAvatar name={recipient.name} photo={recipient.profile_photo_url} /></span>
                                 {recipient.name}
@@ -233,14 +177,12 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
                         ))}
                     </ul>
                 ) : null}
-                {kind === 'individual' || team ? (
-                    <UserSearch
-                        isTaken={(email) => recipients.some((recipient) => recipient.email === email)}
-                        takenLabel="Já incluído"
-                        placeholder={kind === 'individual' ? 'Buscar a pessoa premiada' : 'Incluir alguém fora do elenco'}
-                        onPick={(user) => setRecipients([...recipients, { email: user.email, name: user.full_name || user.name, profile_photo_url: user.profile_photo_url }])}
-                    />
-                ) : <p className="text-xs text-zinc-500">Escolha o time para listar o elenco.</p>}
+                <UserSearch
+                    isTaken={(email) => recipients.some((recipient) => recipient.email === email)}
+                    takenLabel="Já incluído"
+                    placeholder="Buscar a pessoa premiada"
+                    onPick={(user) => setRecipients([...recipients, { email: user.email, name: user.full_name || user.name, profile_photo_url: user.profile_photo_url }])}
+                />
             </div>
 
             {error ? <p className="text-sm text-red-300">{error}</p> : null}
@@ -251,7 +193,7 @@ function NewAwardForm({ organization, teams, onCreated }: { organization: Organi
             {confirming ? (
                 <ConfirmDialog title="Confirmar premiação" confirmLabel="Confirmar e premiar" busy={saving} onCancel={() => !saving && setConfirming(false)} onConfirm={() => void save()}>
                     <div className="flex items-center gap-3">
-                        {kind === 'equipe' ? <TrophyIcon color={color} className="h-10 w-10" /> : <MedalIcon color={color} className="h-10 w-10" />}
+                        <MedalIcon color={color} className="h-10 w-10" />
                         <div>
                             <p className="font-semibold text-zinc-100">{title.trim()}</p>
                             <p className="text-xs text-zinc-400">
@@ -349,7 +291,10 @@ export default function OrganizationSportsPage() {
                     <header>
                         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{organization.name}</p>
                         <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">Gerenciar esportes</h1>
-                        <p className="text-sm text-zinc-400">Times, DMs e premiações. O elenco de cada time pode ser editado também pelos DMs dele.</p>
+                        <p className="text-sm text-zinc-400">
+                            Times, DMs e premiações avulsas (ex.: Melhores do Ano). O elenco e os campeonatos de cada time ficam na página do time e podem ser editados também pelos DMs.
+                            {organization.name !== 'LEU' ? <> Atletas e premiações nas Copas da LEU ficam em <Link to={`/entidades/${organization.id}/copas`} className="underline hover:text-zinc-200">Copas</Link>.</> : null}
+                        </p>
                     </header>
 
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">

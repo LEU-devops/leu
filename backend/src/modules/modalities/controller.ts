@@ -1,5 +1,6 @@
 import { Knex } from "knex";
 import { db } from "../../services/db";
+import { internalModalityCode } from "../editions/controller";
 import {
     MAX_BRACKET_TEAMS,
     Match,
@@ -21,32 +22,55 @@ export class ConflictError extends Error {
 
 // --- MODALITIES ---
 
-export async function listModalities(): Promise<Modality[]> {
-    return db("modalities").select("*").orderBy("name");
+/** Modalities of one Copa edition, by name. */
+export async function listModalities(editionId: number): Promise<Modality[]> {
+    return db("modalities").where({ edition_id: editionId }).select("*").orderBy("name");
 }
 
 export async function getModality(code: string): Promise<Modality | undefined> {
     return db("modalities").where({ code }).first();
 }
 
-export async function createModality(input: { code?: unknown; name?: unknown; type?: unknown }): Promise<Modality> {
-    const code = typeof input.code === "string" ? input.code.trim().toUpperCase() : "";
+/**
+ * Body: `{ code, name, type }`. `code` is the 2–3 letter code people see ("FM"), unique within the
+ * edition; the stored key gets the edition appended when another edition already uses it.
+ */
+export async function createModality(editionId: number, input: { code?: unknown; name?: unknown; type?: unknown }): Promise<Modality> {
+    const shortCode = typeof input.code === "string" ? input.code.trim().toUpperCase() : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
     const type = input.type;
 
-    if (!/^[A-Z]{2}$/.test(code))
-        throw new ValidationError("code must be exactly 2 letters");
+    if (!/^[A-Z]{2,3}$/.test(shortCode))
+        throw new ValidationError("code must have 2 or 3 letters");
     if (!name)
         throw new ValidationError("name is required");
     if (!MODALITY_TYPES.includes(type as ModalityType))
         throw new ValidationError(`type must be one of: ${MODALITY_TYPES.join(", ")}`);
 
-    if (await getModality(code))
-        throw new ConflictError(`Modality ${code} already exists`);
+    return db.transaction(async (trx) => {
+        if (await trx("modalities").where({ edition_id: editionId, short_code: shortCode }).first())
+            throw new ConflictError(`Modality ${shortCode} already exists in this edition`);
+        const modality: Modality = {
+            code: await internalModalityCode(trx, shortCode, editionId),
+            short_code: shortCode,
+            edition_id: editionId,
+            name,
+            type: type as ModalityType,
+        };
+        await trx("modalities").insert(modality);
+        return modality;
+    });
+}
 
-    const modality: Modality = { code, name, type: type as ModalityType };
-    await db("modalities").insert(modality);
-    return modality;
+/** Only a modality without bracket, registrations or events can be deleted, so no result is lost. */
+export async function deleteModality(code: string): Promise<void> {
+    if (!(await getModality(code)))
+        throw new ValidationError(`Modality ${code} not found`);
+    for (const table of ["matches", "registrations", "events"] as const) {
+        if (await db(table).where({ modality_code: code }).first())
+            throw new ConflictError("This modality already has a bracket, registrations or events");
+    }
+    await db("modalities").where({ code }).delete();
 }
 
 // --- BRACKET ---
@@ -143,7 +167,7 @@ async function findOrCreateTeams(trx: Knex.Transaction, names: string[]): Promis
             continue;
         }
         const [{ id }] = await trx("teams").insert({ name }).returning("id");
-        teams.push({ id, name, bonus_torcida: false, penalty_points: 0 });
+        teams.push({ id, name, organization_id: null });
     }
     return teams;
 }
