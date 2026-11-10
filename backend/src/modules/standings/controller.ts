@@ -1,5 +1,7 @@
 import { db } from "../../services/db";
 import { isEventsModality, type Modality, type ModalityType } from "../../types/competition";
+import { listModalities } from "../modalities/controller";
+import { listTeams } from "../teams/controller";
 import { loadEvents, scoreOrError, type EventWithResults } from "../events/controller";
 import { BONUS_TORCIDA_POINTS, scoreBracket, StandingsError, type BracketInput, type PlacementStatus, type Range } from "./placement";
 
@@ -16,8 +18,6 @@ export interface StandingsCell {
 /** One column of the standings table. */
 export interface StandingsModality {
     code: string;
-    /** The code people see ("FM"); `code` is the internal key. */
-    short_code: string;
     name: string;
     type: ModalityType;
     team_count: number;
@@ -29,7 +29,7 @@ export interface StandingsModality {
 type ScoredModality = { column: StandingsModality; cells: Map<number, StandingsCell> };
 
 function emptyColumn(modality: Modality): StandingsModality {
-    return { code: modality.code, short_code: modality.short_code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
+    return { code: modality.code, name: modality.name, type: modality.type, team_count: 0, finished: false, error: null };
 }
 
 /** One row of the standings table. */
@@ -93,25 +93,18 @@ function scoreEventsModality(modality: Modality, teamIds: number[], events: Even
 }
 
 /**
- * The standings table of one edition: every team that takes part in it (in a bracket, a
- * registration or with a scoring adjustment) against every modality, with bonus, penalty and totals.
+ * The live standings table of one edition: every team of the edition against every modality,
+ * with bonus, penalty and totals. Closing the edition saves it as the final results.
  */
 export async function getStandings(editionId: number): Promise<Standings> {
-    const modalities = await db("modalities").where({ edition_id: editionId }).select("*").orderBy("name");
+    const modalities = await listModalities(editionId);
     const codes = modalities.map((modality) => modality.code);
-    const [matches, registrations, scoring] = await Promise.all([
-        db("matches").whereIn("modality_code", codes).select("id", "modality_code", "round", "team_a_id", "team_b_id", "winner_id", "walkover"),
-        db("registrations").whereIn("modality_code", codes).select("*"),
-        db("edition_team_scoring").where({ edition_id: editionId }).select("*"),
+    const [matches, registrations, teams] = await Promise.all([
+        db("matches").where({ edition_id: editionId }).whereIn("modality_code", codes).select("id", "modality_code", "round", "team_a_id", "team_b_id", "winner_id", "walkover"),
+        db("registrations").where({ edition_id: editionId }).whereIn("modality_code", codes).select("*"),
+        listTeams(editionId),
     ]);
-    const teamIds = new Set<number>([
-        ...matches.flatMap((m) => [m.team_a_id, m.team_b_id]).filter((id): id is number => id !== null),
-        ...registrations.map((r) => r.team_id),
-        ...scoring.map((s) => s.team_id),
-    ]);
-    const teams = await db("teams").whereIn("id", [...teamIds]).select("*").orderBy("name");
-    const scoringByTeam = new Map(scoring.map((s) => [s.team_id, s]));
-    const eventsByModality = await loadEvents(db, modalities.filter((m) => isEventsModality(m.type)).map((m) => m.code));
+    const eventsByModality = await loadEvents(db, editionId, modalities.filter((m) => isEventsModality(m.type)).map((m) => m.code));
 
     const scored = modalities.map((modality) =>
         isEventsModality(modality.type)
@@ -140,9 +133,8 @@ export async function getStandings(editionId: number): Promise<Standings> {
                 }
             }
 
-            const adjustment = scoringByTeam.get(team.id);
-            const earned = Boolean(adjustment?.bonus_torcida);
-            const penalty = adjustment?.penalty_points ?? 0;
+            const earned = team.bonus_torcida;
+            const penalty = team.penalty_points;
             const bonus = earned ? BONUS_TORCIDA_POINTS : 0;
             total.min += bonus - penalty;
             total.max += bonus - penalty;

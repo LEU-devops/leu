@@ -12,6 +12,7 @@ import {
 } from "../organizations/controller";
 import { getSportsTeamPermissions } from "../sports-teams/controller";
 import { getStandings } from "../standings/controller";
+import { listEditions } from "../editions/controller";
 import type { Range } from "../standings/placement";
 
 export type ParticipationKind = "externo" | "copa";
@@ -24,8 +25,8 @@ interface ParticipationRow {
     competition: string | null;
     year: number | null;
     placement: number | null;
+    edition_id: number | null;
     modality_code: string | null;
-    copa_team_id: number | null;
 }
 
 export interface Athlete {
@@ -44,11 +45,12 @@ export interface ParticipationView {
     competition: string;
     year: number;
     edition: { id: number; name: string; year: number } | null;
-    modality: { code: string; short_code: string; name: string } | null;
+    modality: { code: string; name: string } | null;
+    /** Copa only: the organization as a team of the edition (`id` = organization id, `name` = its name there). */
     copa_team: { id: number; name: string } | null;
     /** Final position (1 = ouro...) or null: just "participação", or a Copa still in progress. */
     placement: number | null;
-    /** Copa only: the position or range of positions in the edition standings, live. */
+    /** Copa only: the saved final position, else the position or range in the live standings. */
     position_range: Range | null;
     /** Copa only: the modality has not finished yet. */
     in_progress: boolean;
@@ -58,15 +60,32 @@ export interface ParticipationView {
 
 // --- LOADING ---
 
-/** Live Copa results: by "modality code|team id" → position range and whether the modality is over. */
+/** Key of a Copa entry: an organization in a modality of an edition. */
+function copaKey(editionId: number | null, code: string | null, organizationId: number): string {
+    return `${editionId}|${code}|${organizationId}`;
+}
+
+/**
+ * Copa results by `copaKey`: the saved final position when the edition has one for the modality,
+ * else the live standings (position range and whether the modality is over).
+ */
 async function copaResults(editionIds: number[]): Promise<Map<string, { position: Range; finished: boolean }>> {
     const results = new Map<string, { position: Range; finished: boolean }>();
-    for (const editionId of new Set(editionIds)) {
+    const ids = [...new Set(editionIds)];
+    if (ids.length === 0) return results;
+    const saved = await db("modality_results").whereIn("edition_id", ids).select("*");
+    const withSaved = new Set(saved.map((row) => `${row.edition_id}|${row.modality_code}`));
+    for (const row of saved)
+        results.set(copaKey(row.edition_id, row.modality_code, row.organization_id), { position: { min: row.position, max: row.position }, finished: true });
+
+    const editionsWithLive = await db("copa_editions").whereIn("id", ids).where({ finished: false }).pluck("id");
+    for (const editionId of editionsWithLive) {
         const standings = await getStandings(editionId);
         const finished = new Map(standings.modalities.map((modality) => [modality.code, modality.finished]));
         for (const team of standings.teams) {
             for (const [code, cell] of Object.entries(team.modalities)) {
-                if (cell) results.set(`${code}|${team.id}`, { position: cell.position, finished: finished.get(code) ?? false });
+                if (cell && !withSaved.has(`${editionId}|${code}`))
+                    results.set(copaKey(editionId, code, team.id), { position: cell.position, finished: finished.get(code) ?? false });
             }
         }
     }
@@ -78,42 +97,46 @@ async function toViews(rows: (Omit<ParticipationRow, "id"> & { id: number | null
     if (rows.length === 0) return [];
     const ids = rows.map((row) => row.id).filter((id): id is number => id !== null);
     const codes = rows.map((row) => row.modality_code).filter((code): code is string => code !== null);
+    const editionIds = [...new Set(rows.map((row) => row.edition_id).filter((id): id is number => id !== null))];
     const teamIds = rows.map((row) => row.sports_team_id).filter((id): id is number => id !== null);
-    const copaTeamIds = rows.map((row) => row.copa_team_id).filter((id): id is number => id !== null);
 
-    const [athletes, sportsTeams, modalities, copaTeams, organizations] = await Promise.all([
+    const [athletes, sportsTeams, modalities, editions, copaNames, organizations] = await Promise.all([
         ids.length > 0
             ? db("participation_athletes as a").join("users as u", "u.email", "a.user_email").whereIn("a.participation_id", ids)
                 .orderBy("u.nickname").select("a.participation_id", "a.user_email as email", "u.nickname as name", "u.profile_photo_url")
             : [],
         teamIds.length > 0 ? db("sports_teams").whereIn("id", teamIds).select("id", "name") : [],
-        codes.length > 0
-            ? db("modalities as m").join("copa_editions as e", "e.id", "m.edition_id").whereIn("m.code", codes)
-                .select("m.code", "m.short_code", "m.name", "e.id as edition_id", "e.name as edition_name", "e.year as edition_year")
-            : [],
-        copaTeamIds.length > 0 ? db("teams").whereIn("id", copaTeamIds).select("id", "name") : [],
+        codes.length > 0 ? db("modalities").whereIn("code", codes).select("code", "name") : [],
+        editionIds.length > 0 ? listEditions().then((all) => all.filter((edition) => editionIds.includes(edition.id))) : [],
+        editionIds.length > 0 ? db("edition_organizations").whereIn("edition_id", editionIds).select("edition_id", "organization_id", "display_name") : [],
         organizationSummaries(rows.map((row) => row.organization_id)),
     ]);
     const awards = ids.length > 0 ? (await listAwards({ participationIds: ids })) : [];
     const modalityByCode = new Map(modalities.map((m) => [m.code, m]));
-    const results = await copaResults(modalities.map((m) => m.edition_id));
+    const editionById = new Map(editions.map((e) => [e.id, e]));
+    const copaNameOf = new Map(copaNames.map((row) => [`${row.edition_id}|${row.organization_id}`, row.display_name as string]));
+    const results = await copaResults(editionIds);
 
     return rows.map((row) => {
         const modality = row.modality_code ? modalityByCode.get(row.modality_code) : undefined;
-        const result = row.kind === "copa" ? results.get(`${row.modality_code}|${row.copa_team_id}`) : undefined;
+        const edition = row.edition_id !== null ? editionById.get(row.edition_id) : undefined;
+        const organization = organizations.get(row.organization_id)!;
+        const isCopa = row.kind === "copa";
+        const result = isCopa ? results.get(copaKey(row.edition_id, row.modality_code, row.organization_id)) : undefined;
         return {
             id: row.id,
             kind: row.kind,
-            organization: organizations.get(row.organization_id)!,
+            organization,
             team: sportsTeams.find((team) => team.id === row.sports_team_id) ?? null,
-            competition: modality ? modality.edition_name : row.competition ?? "",
-            year: modality ? modality.edition_year : row.year ?? 0,
-            edition: modality ? { id: modality.edition_id, name: modality.edition_name, year: modality.edition_year } : null,
-            modality: modality ? { code: modality.code, short_code: modality.short_code, name: modality.name } : null,
-            copa_team: copaTeams.find((team) => team.id === row.copa_team_id) ?? null,
-            placement: row.kind === "copa" ? (result?.finished ? result.position.min : null) : row.placement,
+            competition: edition ? edition.name : row.competition ?? "",
+            year: edition ? edition.year : row.year ?? 0,
+            edition: edition ? { id: edition.id, name: edition.name, year: edition.year } : null,
+            modality: modality ? { code: modality.code, name: modality.name } : null,
+            copa_team: isCopa ? { id: organization.id, name: copaNameOf.get(`${row.edition_id}|${row.organization_id}`) ?? organization.name } : null,
+            placement: isCopa ? (result?.finished ? result.position.min : null) : row.placement,
             position_range: result?.position ?? null,
-            in_progress: row.kind === "copa" ? !(result?.finished ?? false) : false,
+            // In a closed edition, a modality without a saved result is just "participação".
+            in_progress: isCopa && !edition?.finished ? !(result?.finished ?? false) : false,
             athletes: athletes
                 .filter((athlete) => athlete.participation_id === row.id)
                 .map(({ email, name, profile_photo_url }) => ({ email, name, profile_photo_url })),
@@ -148,38 +171,38 @@ export async function getParticipation(id: number): Promise<ParticipationView> {
 }
 
 /**
- * Every modality of an edition in which a Copa team of the organization takes part (in the
- * bracket or registered), with the live result and the athletes/awards filled in so far.
+ * Every modality of an edition in which the organization plays (in a bracket, registered or with a
+ * saved result), with the result and the athletes/awards filled in so far.
  */
 export async function listCopaEntries(organizationId: number, editionId: number): Promise<ParticipationView[]> {
-    const copaTeams = await db("teams").where({ organization_id: organizationId }).select("id");
-    if (copaTeams.length === 0) return [];
-    const teamIds = copaTeams.map((team) => team.id);
-    const modalities = await db("modalities").where({ edition_id: editionId }).select("code");
-    const codes = modalities.map((m) => m.code);
-    if (codes.length === 0) return [];
-
-    const [inMatches, registered, existing] = await Promise.all([
-        db("matches").whereIn("modality_code", codes)
-            .where((q) => q.whereIn("team_a_id", teamIds).orWhereIn("team_b_id", teamIds))
-            .select("modality_code", "team_a_id", "team_b_id"),
-        db("registrations").whereIn("modality_code", codes).whereIn("team_id", teamIds).select("modality_code", "team_id"),
-        db("participations").where({ kind: "copa" }).whereIn("modality_code", codes).whereIn("copa_team_id", teamIds).select<ParticipationRow[]>("*"),
+    const [inMatches, registered, ranked, existing] = await Promise.all([
+        db("matches").where({ edition_id: editionId })
+            .where((q) => q.where({ team_a_id: organizationId }).orWhere({ team_b_id: organizationId }))
+            .distinct("modality_code"),
+        db("registrations").where({ edition_id: editionId, team_id: organizationId }).select("modality_code"),
+        db("modality_results").where({ edition_id: editionId, organization_id: organizationId }).select("modality_code"),
+        db("participations").where({ kind: "copa", edition_id: editionId, organization_id: organizationId }).select<ParticipationRow[]>("*"),
     ]);
 
     const entries = new Map<string, Omit<ParticipationRow, "id"> & { id: number | null }>();
-    const add = (code: string, teamId: number) => entries.set(`${code}|${teamId}`, {
-        id: null, kind: "copa", organization_id: organizationId, sports_team_id: null,
-        competition: null, year: null, placement: null, modality_code: code, copa_team_id: teamId,
-    });
-    for (const match of inMatches) {
-        for (const teamId of [match.team_a_id, match.team_b_id])
-            if (teamId !== null && teamIds.includes(teamId)) add(match.modality_code, teamId);
+    for (const { modality_code: code } of [...inMatches, ...registered, ...ranked]) {
+        entries.set(code, {
+            id: null, kind: "copa", organization_id: organizationId, sports_team_id: null,
+            competition: null, year: null, placement: null, edition_id: editionId, modality_code: code,
+        });
     }
-    for (const registration of registered) add(registration.modality_code, registration.team_id);
-    for (const row of existing) entries.set(`${row.modality_code}|${row.copa_team_id}`, row);
+    for (const row of existing) entries.set(row.modality_code!, row);
 
     return sortViews(await toViews([...entries.values()]));
+}
+
+/** Whether the organization plays the modality in the edition (bracket, registration or saved result). */
+async function playsModality(editionId: number, code: string, organizationId: number): Promise<boolean> {
+    return Boolean(
+        await db("matches").where({ edition_id: editionId, modality_code: code }).where((q) => q.where({ team_a_id: organizationId }).orWhere({ team_b_id: organizationId })).first()
+        ?? await db("registrations").where({ edition_id: editionId, modality_code: code, team_id: organizationId }).first()
+        ?? await db("modality_results").where({ edition_id: editionId, modality_code: code, organization_id: organizationId }).first(),
+    );
 }
 
 // --- PERMISSIONS ---
@@ -308,28 +331,24 @@ export async function updateParticipation(email: string, id: number, input: Exte
 }
 
 /**
- * Athletes of an AAA in a Copa modality. The participation row is created on first save; the
- * Copa team must belong to the organization and take part in the modality.
+ * Athletes of an organization in a Copa modality of an edition. The participation row is created
+ * on first save; the organization must play the modality in that edition.
  */
-export async function setCopaAthletes(email: string, input: { modality_code?: unknown; copa_team_id?: unknown; athletes?: unknown }): Promise<ParticipationView> {
+export async function setCopaAthletes(email: string, editionId: number, input: { modality_code?: unknown; organization_id?: unknown; athletes?: unknown }): Promise<ParticipationView> {
     const code = String(input.modality_code ?? "").toUpperCase();
-    const teamId = Number(input.copa_team_id);
-    const team = Number.isInteger(teamId) ? await db("teams").where({ id: teamId }).first() : undefined;
-    if (!team || team.organization_id === null) throw new ValidationError("copa_team_id must be a Copa team linked to an organization");
-    if (!(await db("modalities").where({ code }).first())) throw new ValidationError("modality_code must be a modality");
-    await assertCanManageSports(email, team.organization_id);
-
-    const plays = await db("matches").where({ modality_code: code }).where((q) => q.where({ team_a_id: teamId }).orWhere({ team_b_id: teamId })).first()
-        ?? await db("registrations").where({ modality_code: code, team_id: teamId }).first();
-    if (!plays) throw new ValidationError("This team does not take part in this modality");
+    const organizationId = Number(input.organization_id);
+    if (!Number.isInteger(organizationId)) throw new ValidationError("organization_id must be an organization");
+    await assertCanManageSports(email, organizationId);
+    if (!(await playsModality(editionId, code, organizationId)))
+        throw new ValidationError("This organization does not take part in this modality");
 
     const athletes = await parseAthletes(input.athletes ?? []);
     const id = await db.transaction(async (trx) => {
-        const existing = await trx("participations").where({ kind: "copa", modality_code: code, copa_team_id: teamId }).first();
+        const existing = await trx("participations").where({ kind: "copa", edition_id: editionId, modality_code: code, organization_id: organizationId }).first();
         let participationId = existing?.id;
         if (participationId === undefined) {
             const [row] = await trx("participations")
-                .insert({ kind: "copa", organization_id: team.organization_id!, modality_code: code, copa_team_id: teamId })
+                .insert({ kind: "copa", organization_id: organizationId, edition_id: editionId, modality_code: code })
                 .returning("id");
             participationId = insertedId(row);
         }

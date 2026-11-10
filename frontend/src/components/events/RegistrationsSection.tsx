@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { setRegistrations, type EventsView } from '../../services/competition'
+import type { ModalityRef } from '../../types/competition'
 import type { Team } from '../../types/competition'
 import TeamLogo from '../bracket/TeamLogo'
 import { ERROR_BOX, errorMessage } from './shared'
 
 interface Props {
-    code: string
+    modality: ModalityRef
     /** Teams registered in the modality. */
     registered: Team[]
     /** Every team of the competition, to register from. */
@@ -18,7 +19,7 @@ interface Props {
  * Who takes part in the modality. Registration is per modality, not per event: the registered
  * teams are the options of every event, and their number picks the points table of the overall standings.
  */
-export default function RegistrationsSection({ code, registered, allTeams, canEdit, onChange }: Props) {
+export default function RegistrationsSection({ modality, registered, allTeams, canEdit, onChange }: Props) {
     const [error, setError] = useState<string | null>(null)
     const [busyId, setBusyId] = useState<number | null>(null)
     const registeredIds = new Set(registered.map((t) => t.id))
@@ -28,7 +29,7 @@ export default function RegistrationsSection({ code, registered, allTeams, canEd
         setError(null)
         setBusyId(team.id)
         try {
-            onChange(await setRegistrations(code, next.map((t) => t.id)))
+            onChange(await setRegistrations(modality, next.map((t) => t.id)))
         } catch (saveError) {
             setError(errorMessage(saveError, 'Não foi possível alterar as inscrições.'))
         } finally {

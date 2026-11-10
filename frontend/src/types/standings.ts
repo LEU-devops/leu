@@ -24,8 +24,6 @@ export interface StandingsCell {
 /** One column of the table. */
 export interface StandingsModality {
     code: string
-    /** The code people see ("FM"); `code` is the internal key. */
-    short_code: string
     name: string
     type: ModalityType
     team_count: number

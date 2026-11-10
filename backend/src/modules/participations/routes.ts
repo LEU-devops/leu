@@ -36,9 +36,9 @@ router.get("/copa", async (req: Request, res: Response) => {
     res.json(await listCopaEntries(parseId(req.query.organization_id), await resolveEditionId(req.query.edition)));
 });
 
-/** Body: `{ modality_code, copa_team_id, athletes: [email] }`. Creates the Copa participation on first save. */
+/** Body: `{ edition_id?, modality_code, organization_id, athletes: [email] }` (default: the current edition). Creates the Copa participation on first save. */
 router.put("/copa", authMiddleware, async (req: Request, res: Response) => {
-    res.json(await setCopaAthletes(req.user!.email, req.body ?? {}));
+    res.json(await setCopaAthletes(req.user!.email, await resolveEditionId(req.body?.edition_id), req.body ?? {}));
 });
 
 router.get("/:id", async (req: Request, res: Response) => {

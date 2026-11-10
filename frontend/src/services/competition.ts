@@ -1,4 +1,4 @@
-import type { BracketMatch, CopaEdition, EventFlags, Modality, ModalityEvent, ModalityType, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
+import type { BracketMatch, CatalogModality, ChampionsRow, CopaEdition, Cup, EditionResults, EventFlags, Modality, ModalityEvent, ModalityRef, ModalityType, ScheduledMatch, Team, TimeSlot, Venue } from '../types/competition'
 import type { OrganizationHierarchy } from '../types/organizations'
 import type { EventsStandings, Standings } from '../types/standings'
 import { request } from './api'
@@ -8,22 +8,70 @@ function editionQuery(editionId?: number): string {
     return editionId === undefined ? '' : `?edition=${editionId}`
 }
 
-// --- EDITIONS ---
+// --- CUPS AND EDITIONS ---
 
+export function getCups(): Promise<Cup[]> {
+    return request('/cups')
+}
+
+export function createCup(name: string): Promise<Cup> {
+    return request('/cups', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
+export function renameCup(id: number, name: string): Promise<Cup> {
+    return request(`/cups/${id}`, { method: 'PUT', body: JSON.stringify({ name }) })
+}
+
+/** Only a cup without editions. */
+export function deleteCup(id: number): Promise<null> {
+    return request(`/cups/${id}`, { method: 'DELETE' })
+}
+
+/** Newest first. */
 export function getEditions(): Promise<CopaEdition[]> {
     return request('/copa-editions')
 }
 
-export function createEdition(input: { name: string, year: number, copyModalitiesFrom: number | null, makeCurrent: boolean }): Promise<CopaEdition> {
+/** Starts with the modalities and teams of the cup's last edition. `name` replaces the cup's name in this edition. */
+export function createEdition(input: { cupId: number, year: number, name: string | null, makeCurrent: boolean }): Promise<CopaEdition> {
     return request('/copa-editions', { method: 'POST', body: JSON.stringify(input) })
 }
 
-export function updateEdition(id: number, changes: { name?: string, year?: number, isCurrent?: true }): Promise<CopaEdition> {
+export function updateEdition(id: number, changes: { cupId?: number, year?: number, name?: string | null, isCurrent?: true }): Promise<CopaEdition> {
     return request(`/copa-editions/${id}`, { method: 'PUT', body: JSON.stringify(changes) })
 }
 
 export function deleteEdition(id: number): Promise<null> {
     return request(`/copa-editions/${id}`, { method: 'DELETE' })
+}
+
+// --- RESULTS ---
+
+export function getEditionResults(editionId: number): Promise<EditionResults> {
+    return request(`/copa-editions/${editionId}/results`)
+}
+
+/** Replaces the overall results (`scope = 'overall'`) or a modality's. Ties share a position. */
+export function setEditionResults(editionId: number, scope: string, entries: { organizationId: number, position: number, points?: number | null }[]): Promise<EditionResults> {
+    return request(`/copa-editions/${editionId}/results`, { method: 'PUT', body: JSON.stringify({ scope, entries }) })
+}
+
+/** Saves the live standings as the final results and marks the edition finished. */
+export function closeEdition(editionId: number): Promise<EditionResults> {
+    return request(`/copa-editions/${editionId}/close`, { method: 'POST' })
+}
+
+export function reopenEdition(editionId: number): Promise<EditionResults> {
+    return request(`/copa-editions/${editionId}/reopen`, { method: 'POST' })
+}
+
+/** Podiums of every edition with saved results, newest first: overall, or of `modality`. */
+export function getChampions(filter: { cupId?: number, modality?: string }): Promise<ChampionsRow[]> {
+    const params = new URLSearchParams()
+    if (filter.cupId !== undefined) params.set('cup_id', String(filter.cupId))
+    if (filter.modality) params.set('modality', filter.modality)
+    const query = params.toString()
+    return request(`/champions${query ? `?${query}` : ''}`)
 }
 
 // --- MODALITIES AND TEAMS ---
@@ -32,24 +80,52 @@ export function getModalities(editionId?: number): Promise<Modality[]> {
     return request(`/modalities${editionQuery(editionId)}`)
 }
 
-/** `code` is the short code people see ("FM"). */
-export function createModality(editionId: number, input: { code: string, name: string, type: ModalityType }): Promise<Modality> {
-    return request('/modalities', { method: 'POST', body: JSON.stringify({ ...input, editionId }) })
+/** Every modality of every edition, each with the editions that have it. */
+export function getModalityCatalog(): Promise<CatalogModality[]> {
+    return request('/modalities/catalog')
 }
 
-/** Only for a modality without bracket, registrations or events. */
+/** A new catalog modality ("FM"), added to the editions in `editionIds`. */
+export function createModality(input: { code: string, name: string, type: ModalityType, editionIds: number[] }): Promise<CatalogModality> {
+    return request('/modalities', { method: 'POST', body: JSON.stringify(input) })
+}
+
+/** Removes it from the catalog; only when nothing was played in it in any edition. */
 export function deleteModality(code: string): Promise<null> {
     return request(`/modalities/${code}`, { method: 'DELETE' })
 }
 
-/** Every Copa team, with its bonus and penalty in the edition. */
-export function getTeams(editionId?: number): Promise<Team[]> {
-    return request(`/teams${editionQuery(editionId)}`)
+export function addModalityToEdition(editionId: number, code: string): Promise<null> {
+    return request(`/copa-editions/${editionId}/modalities/${code}`, { method: 'PUT' })
 }
 
-/** Links a Copa team to its AAA (null unlinks). */
-export function setTeamOrganization(teamId: number, organizationId: number | null): Promise<Team> {
-    return request(`/teams/${teamId}/organization`, { method: 'PUT', body: JSON.stringify({ organizationId }) })
+/** Only when nothing was played in it in that edition. */
+export function removeModalityFromEdition(editionId: number, code: string): Promise<null> {
+    return request(`/copa-editions/${editionId}/modalities/${code}`, { method: 'DELETE' })
+}
+
+/** URL of a modality in an edition, plus `rest` (e.g. "/bracket"). */
+function modalityUrl(ref: ModalityRef, rest: string): string {
+    return `/modalities/${ref.code}${rest}?edition=${ref.edition_id}`
+}
+
+/** The teams of the edition (the organizations playing it), with their names and bonus/penalty there. */
+export function getTeams(editionId: number): Promise<Team[]> {
+    return request(`/copa-editions/${editionId}/teams`)
+}
+
+/** `displayName` defaults to the organization's name in the Copas. */
+export function addTeam(editionId: number, organizationId: number, displayName?: string): Promise<Team> {
+    return request(`/copa-editions/${editionId}/teams`, { method: 'POST', body: JSON.stringify({ organizationId, displayName }) })
+}
+
+/** Only a team that has not played or been ranked in the edition. */
+export function removeTeam(editionId: number, organizationId: number): Promise<null> {
+    return request(`/copa-editions/${editionId}/teams/${organizationId}`, { method: 'DELETE' })
+}
+
+export function renameTeam(editionId: number, organizationId: number, displayName: string): Promise<Team> {
+    return request(`/copa-editions/${editionId}/teams/${organizationId}`, { method: 'PUT', body: JSON.stringify({ displayName }) })
 }
 
 export function getOrganizations(): Promise<OrganizationHierarchy[]> {
@@ -81,13 +157,13 @@ export function getMatches(editionId?: number): Promise<ScheduledMatch[]> {
     return request(`/matches${editionQuery(editionId)}`)
 }
 
-export function getBracket(code: string): Promise<BracketMatch[]> {
-    return request(`/modalities/${code}/bracket`)
+export function getBracket(modality: ModalityRef): Promise<BracketMatch[]> {
+    return request(modalityUrl(modality, '/bracket'))
 }
 
-/** `slots` are the first-round slots top to bottom; `null` gives the slot's opponent a bye. */
-export function createBracket(code: string, slots: (string | null)[]): Promise<BracketMatch[]> {
-    return request(`/modalities/${code}/bracket`, {
+/** `slots` are the team ids of the first-round slots top to bottom; `null` gives the slot's opponent a bye. */
+export function createBracket(modality: ModalityRef, slots: (number | null)[]): Promise<BracketMatch[]> {
+    return request(modalityUrl(modality, '/bracket'), {
         method: 'POST',
         body: JSON.stringify({ slots }),
     })
@@ -102,16 +178,16 @@ export interface MatchResultInput {
 }
 
 /** Sets or replaces a match result. Responds with the whole bracket. */
-export function setMatchResult(code: string, matchId: number, result: MatchResultInput): Promise<BracketMatch[]> {
-    return request(`/modalities/${code}/matches/${matchId}/result`, {
+export function setMatchResult(modality: ModalityRef, matchId: number, result: MatchResultInput): Promise<BracketMatch[]> {
+    return request(modalityUrl(modality, `/matches/${matchId}/result`), {
         method: 'PUT',
         body: JSON.stringify(result),
     })
 }
 
 /** Reverts a match to unresolved. Responds with the whole bracket. */
-export function clearMatchResult(code: string, matchId: number): Promise<BracketMatch[]> {
-    return request(`/modalities/${code}/matches/${matchId}/result`, { method: 'DELETE' })
+export function clearMatchResult(modality: ModalityRef, matchId: number): Promise<BracketMatch[]> {
+    return request(modalityUrl(modality, `/matches/${matchId}/result`), { method: 'DELETE' })
 }
 
 export interface MatchScheduleInput {
@@ -122,8 +198,8 @@ export interface MatchScheduleInput {
 }
 
 /** Sets when and where a match happens and its neutral teams (redator, mesário). Responds with the whole bracket. */
-export function setMatchSchedule(code: string, matchId: number, schedule: MatchScheduleInput): Promise<BracketMatch[]> {
-    return request(`/modalities/${code}/matches/${matchId}/schedule`, {
+export function setMatchSchedule(modality: ModalityRef, matchId: number, schedule: MatchScheduleInput): Promise<BracketMatch[]> {
+    return request(modalityUrl(modality, `/matches/${matchId}/schedule`), {
         method: 'PUT',
         body: JSON.stringify(schedule),
     })
@@ -141,10 +217,7 @@ export interface TeamScoringInput {
 
 /** Updates a team's supporters bonus and/or penalty points in an edition. Responds with the updated team. */
 export function setTeamScoring(teamId: number, editionId: number, scoring: TeamScoringInput): Promise<Team> {
-    return request(`/teams/${teamId}/scoring`, {
-        method: 'PUT',
-        body: JSON.stringify({ ...scoring, editionId }),
-    })
+    return request(`/copa-editions/${editionId}/teams/${teamId}`, { method: 'PUT', body: JSON.stringify(scoring) })
 }
 
 export function createVenue(name: string, parentId: number | null): Promise<Venue> {
@@ -174,30 +247,30 @@ export interface EventsView {
     error: string | null
 }
 
-export function getEventsView(code: string): Promise<EventsView> {
-    return request(`/modalities/${code}/events`)
+export function getEventsView(modality: ModalityRef): Promise<EventsView> {
+    return request(modalityUrl(modality, '/events'))
 }
 
 /** Replaces the registered teams. A team already placed in an event cannot be removed. */
-export function setRegistrations(code: string, teamIds: number[]): Promise<EventsView> {
-    return request(`/modalities/${code}/registrations`, { method: 'PUT', body: JSON.stringify({ teamIds }) })
+export function setRegistrations(modality: ModalityRef, teamIds: number[]): Promise<EventsView> {
+    return request(modalityUrl(modality, '/registrations'), { method: 'PUT', body: JSON.stringify({ teamIds }) })
 }
 
-export function createEvent(code: string, name: string, flags: EventFlags): Promise<EventsView> {
-    return request(`/modalities/${code}/events`, { method: 'POST', body: JSON.stringify({ name, ...flags }) })
+export function createEvent(modality: ModalityRef, name: string, flags: EventFlags): Promise<EventsView> {
+    return request(modalityUrl(modality, '/events'), { method: 'POST', body: JSON.stringify({ name, ...flags }) })
 }
 
 /** Fields left out keep their value. */
-export function updateEvent(code: string, eventId: number, changes: Partial<EventFlags & { name: string; finished: boolean }>): Promise<EventsView> {
-    return request(`/modalities/${code}/events/${eventId}`, { method: 'PUT', body: JSON.stringify(changes) })
+export function updateEvent(modality: ModalityRef, eventId: number, changes: Partial<EventFlags & { name: string; finished: boolean }>): Promise<EventsView> {
+    return request(modalityUrl(modality, `/events/${eventId}`), { method: 'PUT', body: JSON.stringify(changes) })
 }
 
 /** Deletes the event and its results. */
-export function deleteEvent(code: string, eventId: number): Promise<EventsView> {
-    return request(`/modalities/${code}/events/${eventId}`, { method: 'DELETE' })
+export function deleteEvent(modality: ModalityRef, eventId: number): Promise<EventsView> {
+    return request(modalityUrl(modality, `/events/${eventId}`), { method: 'DELETE' })
 }
 
 /** `positions[0]` is the first place over every athlete; null leaves the position empty. A team may appear twice (once in a relay). Replaces every result of the event. */
-export function setEventResults(code: string, eventId: number, positions: (number | null)[]): Promise<EventsView> {
-    return request(`/modalities/${code}/events/${eventId}/results`, { method: 'PUT', body: JSON.stringify({ positions }) })
+export function setEventResults(modality: ModalityRef, eventId: number, positions: (number | null)[]): Promise<EventsView> {
+    return request(modalityUrl(modality, `/events/${eventId}/results`), { method: 'PUT', body: JSON.stringify({ positions }) })
 }

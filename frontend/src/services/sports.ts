@@ -72,8 +72,8 @@ export function getCopaEntries(organizationId: number, editionId: number): Promi
     return request(`/participations/copa?organization_id=${organizationId}&edition=${editionId}`)
 }
 
-export function setCopaAthletes(modalityCode: string, copaTeamId: number, athletes: string[]): Promise<Participation> {
-    return request('/participations/copa', { method: 'PUT', body: JSON.stringify({ modality_code: modalityCode, copa_team_id: copaTeamId, athletes }) })
+export function setCopaAthletes(editionId: number, modalityCode: string, organizationId: number, athletes: string[]): Promise<Participation> {
+    return request('/participations/copa', { method: 'PUT', body: JSON.stringify({ edition_id: editionId, modality_code: modalityCode, organization_id: organizationId, athletes }) })
 }
 
 export function addParticipationAward(id: number, title: string, recipients: string[]): Promise<Participation> {

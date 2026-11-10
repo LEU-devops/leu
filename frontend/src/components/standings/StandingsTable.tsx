@@ -24,7 +24,7 @@ function ModalityHeader({ modality }: { modality: StandingsModality }) {
     return (
         <th scope="col" className={`${HEADER_CELL} text-center ${hasBracket && !modality.error ? '' : 'text-zinc-700'}`} title={title}>
             <span className="flex flex-col items-center gap-0.5">
-                <span className="tracking-[0.15em]">{modality.short_code}</span>
+                <span className="tracking-[0.15em]">{modality.code}</span>
                 <span className="text-[9px] font-normal tracking-normal normal-case">
                     {modality.error ? <span className="text-amber-400">erro</span> : !hasBracket ? '—' : modality.finished ? 'fim' : `${modality.team_count} times`}
                 </span>

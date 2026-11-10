@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { deleteEvent, setEventResults, updateEvent, type EventsView } from '../../services/competition'
+import type { ModalityRef } from '../../types/competition'
 import { athletesPerTeam, EVENT_FLAGS, type EventEntry, type EventFlags, type ModalityEvent, type Team } from '../../types/competition'
 import TeamLogo from '../bracket/TeamLogo'
 import Select from '../Select'
@@ -12,7 +13,7 @@ const FLAG_BADGE: Record<keyof EventFlags, string> = {
 }
 
 interface Props {
-    code: string
+    modality: ModalityRef
     event: ModalityEvent
     /** Registered teams: the options of every position. */
     teams: Team[]
@@ -29,7 +30,7 @@ function entryNote(entry: EventEntry | null): string | null {
 }
 
 /** One event: its name, flags and state, and a table with the team of each position (up to 2 athletes per team). */
-export default function EventCard({ code, event, teams, canEdit, onChange }: Props) {
+export default function EventCard({ modality, event, teams, canEdit, onChange }: Props) {
     const [error, setError] = useState<string | null>(null)
     const [isBusy, setIsBusy] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
@@ -67,7 +68,7 @@ export default function EventCard({ code, event, teams, canEdit, onChange }: Pro
         const next = Array.from({ length }, (_, i) => (i + 1 === position ? teamId : (byPosition.get(i + 1)?.team_id ?? null)))
         // Trailing empty positions are not sent.
         while (next.length > 0 && next[next.length - 1] === null) next.pop()
-        run(() => setEventResults(code, event.id, next), 'Não foi possível salvar o resultado.')
+        run(() => setEventResults(modality, event.id, next), 'Não foi possível salvar o resultado.')
     }
 
     async function save(formEvent: FormEvent<HTMLFormElement>) {
@@ -81,7 +82,7 @@ export default function EventCard({ code, event, teams, canEdit, onChange }: Pro
             setIsEditing(false)
             return
         }
-        const ok = await run(() => updateEvent(code, event.id, changes), 'Não foi possível alterar a prova.')
+        const ok = await run(() => updateEvent(modality, event.id, changes), 'Não foi possível alterar a prova.')
         if (ok) setIsEditing(false)
     }
 
@@ -94,11 +95,11 @@ export default function EventCard({ code, event, teams, canEdit, onChange }: Pro
     function remove() {
         const warning = athletes > 0 ? `\nOs ${athletes} ${athletes === 1 ? 'resultado registrado será perdido' : 'resultados registrados serão perdidos'}.` : ''
         if (!window.confirm(`Remover a prova "${event.name}"?${warning}`)) return
-        run(() => deleteEvent(code, event.id), 'Não foi possível remover a prova.')
+        run(() => deleteEvent(modality, event.id), 'Não foi possível remover a prova.')
     }
 
     function toggleFinished() {
-        run(() => updateEvent(code, event.id, { finished: !event.finished }), 'Não foi possível alterar a prova.')
+        run(() => updateEvent(modality, event.id, { finished: !event.finished }), 'Não foi possível alterar a prova.')
     }
 
     function pointsText(entry: EventEntry | null): { text: string; title: string; muted: boolean } {

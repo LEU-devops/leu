@@ -22,6 +22,8 @@ export interface OrganizationMember {
 export interface OrganizationIdentity {
   id: number;
   name: string;
+  /** Abbreviation shown in the Copas by default ("FEA"). */
+  short_name: string | null;
   description: string | null;
   gradient: string;
   logo_url: string | null;
@@ -41,6 +43,7 @@ export interface OrganizationHierarchy extends OrganizationIdentity {
 const IDENTITY_COLUMNS = [
   "id",
   "name",
+  "short_name",
   "description",
   "gradient",
   "logo_url",
@@ -229,6 +232,10 @@ export async function updateOrganizationIdentity(
     if (name !== current.name && current.name === LEU_NAME)
       throw new ValidationError("The LEU name cannot be changed");
     changes.name = name;
+  }
+  if (input.short_name !== undefined) {
+    const shortName = optionalText(input.short_name, "short_name", 12);
+    changes.short_name = shortName?.toUpperCase() ?? null;
   }
   if (input.description !== undefined)
     changes.description = optionalText(input.description, "description", 200);

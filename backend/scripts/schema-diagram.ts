@@ -9,8 +9,8 @@
  *   npm run schema:diagram           writes docs/schema.md
  *   npm run schema:diagram -- --check   fails if docs/schema.md is out of date (for CI)
  *
- * Column types are the ones SQLite records, so lengths may differ from Postgres (e.g. varchar(255)
- * for a varchar(16) widened only on Postgres); tables, columns and relations are the same.
+ * Column types are the ones SQLite records, so they may differ slightly from Postgres; tables,
+ * columns and relations are the same.
  */
 import fs from "node:fs";
 import path from "node:path";

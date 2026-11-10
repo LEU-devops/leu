@@ -3,7 +3,8 @@ import Loading from '../components/Loading'
 import VenuesSection from '../components/admin/VenuesSection'
 import EditionsSection from '../components/admin/EditionsSection'
 import ModalitiesSection from '../components/admin/ModalitiesSection'
-import CopaTeamsSection from '../components/admin/CopaTeamsSection'
+import EditionTeamsSection from '../components/admin/EditionTeamsSection'
+import ResultsSection from '../components/admin/ResultsSection'
 import EditionSelect from '../components/EditionSelect'
 import { editionLabel, useEdition } from '../contexts/edition'
 import { createTimeSlot, deleteTimeSlot, getTimeSlots } from '../services/competition'
@@ -174,12 +175,13 @@ export default function AdminPage() {
             <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.03] px-5 py-3">
                 <span className="text-sm text-zinc-300">Editando a edição</span>
                 <EditionSelect />
-                {edition ? <span className="text-xs text-zinc-500">Modalidades e horários abaixo são da {editionLabel(edition)}.</span> : null}
+                {edition ? <span className="text-xs text-zinc-500">Times, modalidades, horários e resultados abaixo são da {editionLabel(edition)}.</span> : null}
             </div>
 
+            {edition ? <EditionTeamsSection key={`p-${edition.id}`} editionId={edition.id} /> : null}
             {edition ? <ModalitiesSection key={`m-${edition.id}`} editionId={edition.id} /> : null}
             {edition ? <TimeSlotsSection key={`t-${edition.id}`} editionId={edition.id} /> : null}
-            <CopaTeamsSection />
+            {edition ? <ResultsSection key={`r-${edition.id}`} editionId={edition.id} /> : null}
             <VenuesSection />
         </main>
     )

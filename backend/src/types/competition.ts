@@ -13,44 +13,103 @@ export function isEventsModality(type: ModalityType): type is EventsModalityType
     return (EVENTS_MODALITY_TYPES as readonly ModalityType[]).includes(type);
 }
 
-/** Row shape of `copa_editions`: one Copa (e.g. "Copa Eng" 2026). Exactly one is current. */
-export interface CopaEdition {
+/** Row shape of `cups`: a competition held every year ("Copa Eng", "Copa Bixo", "InterGestões"). */
+export interface Cup {
     id: number;
     name: string;
-    year: number;
-    is_current: boolean;
 }
 
-/** Row shape of the `modalities` table. */
+/** Row shape of `copa_editions`: one year of a cup. Exactly one edition (of any cup) is current. */
+export interface CopaEditionRow {
+    id: number;
+    cup_id: Cup["id"];
+    year: number;
+    /** Shown instead of the cup's name when set. */
+    name: string | null;
+    is_current: boolean;
+    /** Closed: its results are saved and the standings no longer change. */
+    finished: boolean;
+}
+
+/** An edition as the API returns it. */
+export interface CopaEdition {
+    id: number;
+    cup_id: Cup["id"];
+    cup_name: string;
+    year: number;
+    /** What people see: the custom name, else the cup's name. */
+    name: string;
+    custom_name: string | null;
+    is_current: boolean;
+    finished: boolean;
+}
+
+/** Row shape of the `modalities` table: the catalog shared by every edition ("FM" = Futsal Masculino). */
 export interface Modality {
-    /** Internal key, unique across editions (used in URLs and by matches/events/registrations). */
     code: string;
-    /** The code people see ("FM"), unique within the edition. */
-    short_code: string;
-    edition_id: CopaEdition["id"];
     name: string;
     type: ModalityType;
 }
 
-/** Row shape of the `teams` table: an AAA as it appears in the Copas, linked to its organization. */
-export interface Team {
-    id: number;
-    name: string;
-    organization_id: number | null;
+/** Row shape of `edition_modalities`: the modalities an edition has. */
+export interface EditionModality {
+    edition_id: CopaEdition["id"];
+    modality_code: Modality["code"];
 }
 
-/** Row shape of `edition_team_scoring`: adjustments to a team's total in one edition. */
-export interface EditionTeamScoring {
+/** A modality as played in one edition: what brackets, events and standings work with. */
+export interface ModalityInEdition extends Modality {
     edition_id: CopaEdition["id"];
-    team_id: Team["id"];
+}
+
+/** Catalog view: a modality with the editions that have it. */
+export interface CatalogModality extends Modality {
+    edition_ids: CopaEdition["id"][];
+}
+
+/** Identifies a modality in an edition; brackets, events and registrations belong to one. */
+export interface ModalityRef {
+    editionId: CopaEdition["id"];
+    code: Modality["code"];
+}
+
+/**
+ * Row shape of `edition_organizations`: an organization playing an edition. In the Copa code a
+ * "team" is such an organization: matches, registrations and results store its organization id.
+ */
+export interface EditionOrganization {
+    edition_id: CopaEdition["id"];
+    organization_id: number;
+    /** The name it shows in this edition (e.g. "FEA"). */
+    display_name: string;
     bonus_torcida: boolean;      // supporters ("torcida") bonus earned
     penalty_points: number;      // points subtracted from the team's total (0 = none)
 }
 
-/** A team with its scoring adjustments in one edition, as the API returns it. */
-export interface TeamWithScoring extends Team {
+/** A team of an edition as the API returns it: `id` is the organization id, `name` its name in the edition. */
+export interface Team {
+    id: number;
+    name: string;
+    organization_name: string;
     bonus_torcida: boolean;
     penalty_points: number;
+}
+
+/** Row shape of `edition_results`: the final overall position of an organization in an edition. */
+export interface EditionResult {
+    edition_id: CopaEdition["id"];
+    organization_id: number;
+    /** 1 = champion; ties share a position. */
+    position: number;
+    points: number | null;
+}
+
+/** Row shape of `modality_results`: the final position of an organization in a modality of an edition. */
+export interface ModalityResult {
+    edition_id: CopaEdition["id"];
+    modality_code: Modality["code"];
+    organization_id: number;
+    position: number;
 }
 
 /** Row shape of the `venues` table. */
@@ -75,6 +134,7 @@ export type MatchStatus = "scheduled" | "live" | "finished" | "walkover";
 /** Row shape of the `matches` table. */
 export interface Match {
     id: number;
+    edition_id: CopaEdition["id"];
     modality_code: string;
     stage: Stage;
     round: number;
@@ -96,6 +156,7 @@ export interface Match {
 
 /** Row shape of the `registrations` table: a team taking part in an events modality (atletismo, natação). */
 export interface Registration {
+    edition_id: CopaEdition["id"];
     modality_code: string;
     team_id: number;
 }
@@ -111,6 +172,7 @@ export interface EventFlags {
 /** Row shape of the `events` table: an internal event ("prova") of an events modality, e.g. "100m rasos". */
 export interface Event extends EventFlags {
     id: number;
+    edition_id: CopaEdition["id"];
     modality_code: string;
     name: string;
     /** Closed by the organizers: the results are final and the event scores. */
@@ -131,10 +193,13 @@ export const MAX_BRACKET_TEAMS = 16;
 
 declare module "knex/types/tables" {
     interface Tables {
-        copa_editions: CopaEdition;
+        cups: Cup;
+        copa_editions: CopaEditionRow;
         modalities: Modality;
-        teams: Team;
-        edition_team_scoring: EditionTeamScoring;
+        edition_modalities: EditionModality;
+        edition_organizations: EditionOrganization;
+        edition_results: EditionResult;
+        modality_results: ModalityResult;
         venues: Venue;
         matches: Match;
         time_slots: TimeSlot;

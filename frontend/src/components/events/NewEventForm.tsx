@@ -1,16 +1,17 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { createEvent, type EventsView } from '../../services/competition'
+import type { ModalityRef } from '../../types/competition'
 import { EVENT_FLAGS, type EventFlags } from '../../types/competition'
 import EventFlagsFields from './EventFlagsFields'
 import { ERROR_BOX, errorMessage, INPUT_CLASS, PRIMARY_BUTTON } from './shared'
 
 interface Props {
-    code: string
+    modality: ModalityRef
     onChange: (view: EventsView) => void
 }
 
 /** Adds an event to the modality: a name and how it scores (revezamento and/or demonstrativa). */
-export default function NewEventForm({ code, onChange }: Props) {
+export default function NewEventForm({ modality, onChange }: Props) {
     const [name, setName] = useState('')
     const [flags, setFlags] = useState<EventFlags>({ demonstrativa: false, revezamento: false })
     const [error, setError] = useState<string | null>(null)
@@ -24,7 +25,7 @@ export default function NewEventForm({ code, onChange }: Props) {
         setError(null)
         setIsSaving(true)
         try {
-            onChange(await createEvent(code, trimmed, flags))
+            onChange(await createEvent(modality, trimmed, flags))
             setName('') // keep the flags, so several relays can be added in a row
             nameInput.current?.focus()
         } catch (saveError) {

@@ -28,6 +28,7 @@ const GRADIENT_PRESETS: GradientParts[] = [
 /** Text fields as edited in the form (strings, never null). */
 interface Draft {
     name: string
+    short_name: string
     description: string
     about: string
     gradient: GradientParts
@@ -45,6 +46,7 @@ type ImageChange = { file: File, preview: string } | 'remove' | null
 function draftFrom(organization: OrganizationHierarchy): Draft {
     return {
         name: organization.name,
+        short_name: organization.short_name ?? '',
         description: organization.description ?? '',
         about: organization.about ?? '',
         gradient: parseGradient(organization.gradient),
@@ -67,6 +69,7 @@ function diff(organization: OrganizationHierarchy, draft: Draft): IdentityChange
     const original = draftFrom(organization)
     const change: IdentityChange = {}
     if (draft.name.trim() !== original.name) change.name = draft.name.trim()
+    if (draft.short_name.trim().toUpperCase() !== original.short_name) change.short_name = nullable(draft.short_name)?.toUpperCase() ?? null
     if (draft.description.trim() !== original.description) change.description = nullable(draft.description)
     if (draft.about.trim() !== original.about) change.about = nullable(draft.about)
     const gradient = buildGradient(draft.gradient)
@@ -269,6 +272,7 @@ export default function OrganizationIdentityPage() {
         ? {
             ...organization,
             name: draft.name.trim() || organization.name,
+            short_name: nullable(draft.short_name)?.toUpperCase() ?? null,
             description: nullable(draft.description),
             gradient: buildGradient(draft.gradient),
             accent_color: draft.useAccent ? draft.accent : null,
@@ -346,8 +350,17 @@ export default function OrganizationIdentityPage() {
                     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                         <div className="space-y-6">
                             <Card title="Nome">
-                                <Field label="Nome (sigla)" hint={isLeu ? 'O nome da LEU não pode ser alterado.' : 'Usado nos menus, cards e chaveamentos. Até 30 caracteres.'}>
+                                <Field label="Nome (sigla)" hint={isLeu ? 'O nome da LEU não pode ser alterado.' : 'Usado nos menus e cards. Até 30 caracteres.'}>
                                     <input value={draft.name} onChange={(event) => update('name', event.target.value)} maxLength={30} disabled={isLeu} className={INPUT_CLASS} />
+                                </Field>
+                                <Field label="Nome nas Copas" hint="Como o time aparece por padrão em chaveamentos e pontuação (ex.: FEA). Cada edição pode usar outro.">
+                                    <input
+                                        value={draft.short_name}
+                                        onChange={(event) => update('short_name', event.target.value.toUpperCase())}
+                                        maxLength={12}
+                                        placeholder={draft.name.replace(/^AAA/, '') || 'FEA'}
+                                        className={`${INPUT_CLASS} uppercase`}
+                                    />
                                 </Field>
                                 <Field label="Nome completo">
                                     <input

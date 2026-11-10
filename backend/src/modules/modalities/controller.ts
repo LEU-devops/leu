@@ -1,16 +1,18 @@
 import { Knex } from "knex";
 import { db } from "../../services/db";
-import { internalModalityCode } from "../editions/controller";
 import {
+    CatalogModality,
     MAX_BRACKET_TEAMS,
     Match,
     Modality,
+    ModalityInEdition,
+    ModalityRef,
     MODALITY_TYPES,
     ModalityType,
     Stage,
     STAGES,
-    Team,
 } from "../../types/competition";
+import { assertTeams } from "../teams/controller";
 
 export class ValidationError extends Error {
     name = "Validation Error";
@@ -20,62 +22,132 @@ export class ConflictError extends Error {
     name = "Conflict Error";
 }
 
+export class NotFoundError extends Error {
+    name = "Not Found Error";
+}
+
 // --- MODALITIES ---
 
 /** Modalities of one Copa edition, by name. */
-export async function listModalities(editionId: number): Promise<Modality[]> {
-    return db("modalities").where({ edition_id: editionId }).select("*").orderBy("name");
+export async function listModalities(editionId: number): Promise<ModalityInEdition[]> {
+    return db("edition_modalities as em")
+        .join("modalities as m", "m.code", "em.modality_code")
+        .where("em.edition_id", editionId)
+        .select("m.*", "em.edition_id")
+        .orderBy("m.name");
+}
+
+/** The whole catalog, by name, each modality with the editions that have it. */
+export async function listCatalog(): Promise<CatalogModality[]> {
+    const [modalities, links] = await Promise.all([
+        db("modalities").select("*").orderBy("name"),
+        db("edition_modalities").select("*"),
+    ]);
+    return modalities.map((modality) => ({
+        ...modality,
+        edition_ids: links.filter((link) => link.modality_code === modality.code).map((link) => link.edition_id),
+    }));
 }
 
 export async function getModality(code: string): Promise<Modality | undefined> {
     return db("modalities").where({ code }).first();
 }
 
+/** The modality as played in the edition; 404 when the edition does not have it. */
+export async function getEditionModality(trx: Knex, { editionId, code }: ModalityRef): Promise<ModalityInEdition> {
+    const modality = await trx("edition_modalities as em")
+        .join("modalities as m", "m.code", "em.modality_code")
+        .where({ "em.edition_id": editionId, "em.modality_code": code })
+        .first("m.*", "em.edition_id");
+    if (!modality)
+        throw new NotFoundError(`Modality ${code} is not part of edition ${editionId}`);
+    return modality;
+}
+
+/** Tables holding what was played in a modality (per edition). */
+const PLAYED_TABLES = ["matches", "registrations", "events", "participations", "modality_results"] as const;
+
+/** Whether the modality has a bracket, registrations, events or Copa participations (in one edition, or in any). */
+async function hasPlayedData(code: string, editionId?: number): Promise<boolean> {
+    for (const table of PLAYED_TABLES) {
+        const query = db(table).where({ modality_code: code });
+        if (editionId !== undefined) query.where({ edition_id: editionId });
+        if (await query.first()) return true;
+    }
+    return false;
+}
+
+/** A list of modality codes, each of which must exist; used to pick an edition's modalities. */
+export async function parseModalityCodes(raw: unknown): Promise<string[]> {
+    if (!Array.isArray(raw) || raw.some((code) => typeof code !== "string"))
+        throw new ValidationError("modalities must be an array of modality codes");
+    const codes = [...new Set((raw as string[]).map((code) => code.trim().toUpperCase()))];
+    const known = codes.length > 0 ? await db("modalities").whereIn("code", codes).select("code") : [];
+    const missing = codes.filter((code) => !known.some((row) => row.code === code));
+    if (missing.length > 0)
+        throw new ValidationError(`Modality ${missing.join(", ")} not found`);
+    return codes;
+}
+
 /**
- * Body: `{ code, name, type }`. `code` is the 2–3 letter code people see ("FM"), unique within the
- * edition; the stored key gets the edition appended when another edition already uses it.
+ * Body: `{ code, name, type, editionIds? }`. `code` is the 2–3 letter code people see ("FM"),
+ * the same in every edition. The new modality joins the editions in `editionIds` (default: none).
  */
-export async function createModality(editionId: number, input: { code?: unknown; name?: unknown; type?: unknown }): Promise<Modality> {
-    const shortCode = typeof input.code === "string" ? input.code.trim().toUpperCase() : "";
+export async function createModality(input: { code?: unknown; name?: unknown; type?: unknown; editionIds?: unknown }): Promise<CatalogModality> {
+    const code = typeof input.code === "string" ? input.code.trim().toUpperCase() : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
     const type = input.type;
 
-    if (!/^[A-Z]{2,3}$/.test(shortCode))
+    if (!/^[A-Z]{2,3}$/.test(code))
         throw new ValidationError("code must have 2 or 3 letters");
     if (!name)
         throw new ValidationError("name is required");
     if (!MODALITY_TYPES.includes(type as ModalityType))
         throw new ValidationError(`type must be one of: ${MODALITY_TYPES.join(", ")}`);
+    const editionIds = input.editionIds === undefined ? [] : input.editionIds;
+    if (!Array.isArray(editionIds) || editionIds.some((id) => !Number.isInteger(id)))
+        throw new ValidationError("editionIds must be an array of edition ids");
+    const editions = editionIds.length > 0 ? await db("copa_editions").whereIn("id", editionIds as number[]).select("id") : [];
+    if (editions.length !== new Set(editionIds).size)
+        throw new ValidationError("Some editions do not exist");
 
     return db.transaction(async (trx) => {
-        if (await trx("modalities").where({ edition_id: editionId, short_code: shortCode }).first())
-            throw new ConflictError(`Modality ${shortCode} already exists in this edition`);
-        const modality: Modality = {
-            code: await internalModalityCode(trx, shortCode, editionId),
-            short_code: shortCode,
-            edition_id: editionId,
-            name,
-            type: type as ModalityType,
-        };
+        if (await trx("modalities").where({ code }).first())
+            throw new ConflictError(`Modality ${code} already exists`);
+        const modality: Modality = { code, name, type: type as ModalityType };
         await trx("modalities").insert(modality);
-        return modality;
+        if (editions.length > 0)
+            await trx("edition_modalities").insert(editions.map((edition) => ({ edition_id: edition.id, modality_code: code })));
+        return { ...modality, edition_ids: editions.map((edition) => edition.id) };
     });
 }
 
-/** Only a modality without bracket, registrations or events can be deleted, so no result is lost. */
+/** Removes a modality from the catalog (and every edition). Only when nothing was played in it, in any edition. */
 export async function deleteModality(code: string): Promise<void> {
     if (!(await getModality(code)))
-        throw new ValidationError(`Modality ${code} not found`);
-    for (const table of ["matches", "registrations", "events"] as const) {
-        if (await db(table).where({ modality_code: code }).first())
-            throw new ConflictError("This modality already has a bracket, registrations or events");
-    }
+        throw new NotFoundError(`Modality ${code} not found`);
+    if (await hasPlayedData(code))
+        throw new ConflictError("This modality already has a bracket, registrations, events or participations");
     await db("modalities").where({ code }).delete();
+}
+
+/** Adds a catalog modality to an edition (no-op when it is already there). */
+export async function addModalityToEdition({ editionId, code }: ModalityRef): Promise<void> {
+    if (!(await getModality(code)))
+        throw new NotFoundError(`Modality ${code} not found`);
+    await db("edition_modalities").insert({ edition_id: editionId, modality_code: code }).onConflict(["edition_id", "modality_code"]).ignore();
+}
+
+/** Takes a modality out of an edition. Only when nothing was played in it in that edition. */
+export async function removeModalityFromEdition({ editionId, code }: ModalityRef): Promise<void> {
+    if (await hasPlayedData(code, editionId))
+        throw new ConflictError("This modality already has a bracket, registrations, events or participations in this edition");
+    await db("edition_modalities").where({ edition_id: editionId, modality_code: code }).delete();
 }
 
 // --- BRACKET ---
 
-/** A match row joined with the names of its teams, neutral teams (redator, mesário) and venue. */
+/** A match row joined with the names (in its edition) of its teams, neutral teams (redator, mesário) and venue. */
 export interface BracketMatch extends Match {
     team_a_name: string | null;
     team_b_name: string | null;
@@ -87,20 +159,22 @@ export interface BracketMatch extends Match {
 /** The joined columns shared by every match listing. */
 export const BRACKET_MATCH_COLUMNS = [
     "m.*",
-    "ta.name as team_a_name",
-    "tb.name as team_b_name",
-    "tr.name as redator_team_name",
-    "tm.name as mesario_team_name",
+    "ta.display_name as team_a_name",
+    "tb.display_name as team_b_name",
+    "tr.display_name as redator_team_name",
+    "tm.display_name as mesario_team_name",
     "v.name as venue_name",
 ];
 
 /** Joins `matches as m` with the names needed by a BracketMatch. */
 export function joinBracketMatch(qb: Knex.QueryBuilder) {
+    const team = (alias: string, column: string) => (join: Knex.JoinClause) =>
+        join.on(`${alias}.organization_id`, `m.${column}`).andOn(`${alias}.edition_id`, "m.edition_id");
     return qb
-        .leftJoin("teams as ta", "ta.id", "m.team_a_id")
-        .leftJoin("teams as tb", "tb.id", "m.team_b_id")
-        .leftJoin("teams as tr", "tr.id", "m.redator_team_id")
-        .leftJoin("teams as tm", "tm.id", "m.mesario_team_id")
+        .leftJoin("edition_organizations as ta", team("ta", "team_a_id"))
+        .leftJoin("edition_organizations as tb", team("tb", "team_b_id"))
+        .leftJoin("edition_organizations as tr", team("tr", "redator_team_id"))
+        .leftJoin("edition_organizations as tm", team("tm", "mesario_team_id"))
         .leftJoin("venues as v", "v.id", "m.venue_id");
 }
 
@@ -109,42 +183,36 @@ export function normalizeMatch<T extends Match>(match: T): T {
     return { ...match, walkover: Boolean(match.walkover) };
 }
 
-export async function getBracket(modalityCode: string): Promise<BracketMatch[]> {
+export async function getBracket({ editionId, code }: ModalityRef): Promise<BracketMatch[]> {
     const rows: BracketMatch[] = await joinBracketMatch(db("matches as m"))
         .select(BRACKET_MATCH_COLUMNS)
-        .where("m.modality_code", modalityCode)
+        .where({ "m.edition_id": editionId, "m.modality_code": code })
         .orderBy([{ column: "m.round" }, { column: "m.position" }]);
     return rows.map(normalizeMatch);
 }
 
 /**
- * Parses the first-round slots of a bracket: an array whose length is the
- * bracket size (2, 4, 8 or 16). Slots 2k and 2k+1 form first-round match k.
- * A `null` slot means its opponent has a bye and goes straight to round 2.
+ * Parses the first-round slots of a bracket: an array whose length is the bracket size (2, 4, 8
+ * or 16) of team ids (organization ids of the edition's teams). Slots 2k and 2k+1 form first-round
+ * match k. A `null` slot means its opponent has a bye and goes straight to round 2.
  */
-function parseSlots(input: unknown): (string | null)[] {
+function parseSlots(input: unknown): (number | null)[] {
     if (!Array.isArray(input))
-        throw new ValidationError("slots must be an array of team names (null for an empty slot)");
+        throw new ValidationError("slots must be an array of team ids (null for an empty slot)");
 
     const size = input.length;
     if (size < 2 || size > MAX_BRACKET_TEAMS || (size & (size - 1)) !== 0)
         throw new ValidationError(`slots length must be a power of two between 2 and ${MAX_BRACKET_TEAMS}`);
 
-    const slots = input.map((s) => (s === null ? null : typeof s === "string" ? s.trim() : ""));
-    if (slots.some((s) => s === ""))
-        throw new ValidationError("every slot must be a non-empty team name or null");
+    if (input.some((slot) => slot !== null && (typeof slot !== "number" || !Number.isInteger(slot))))
+        throw new ValidationError("every slot must be a team id or null");
+    const slots = input as (number | null)[];
 
-    const names = slots.filter((s): s is string => s !== null);
-    if (names.length < 2)
+    const ids = slots.filter((slot): slot is number => slot !== null);
+    if (ids.length < 2)
         throw new ValidationError("a bracket needs at least 2 teams");
-
-    const seen = new Set<string>();
-    for (const n of names) {
-        const key = n.toLowerCase();
-        if (seen.has(key))
-            throw new ValidationError(`duplicate team name: ${n}`);
-        seen.add(key);
-    }
+    if (new Set(ids).size !== ids.length)
+        throw new ValidationError("a team appears twice");
 
     for (let match = 0; match < size / 2; match++) {
         if (slots[2 * match] === null && slots[2 * match + 1] === null)
@@ -152,24 +220,6 @@ function parseSlots(input: unknown): (string | null)[] {
     }
 
     return slots;
-}
-
-/** Finds teams by name, creating the ones that do not exist yet. Keeps the input order. */
-async function findOrCreateTeams(trx: Knex.Transaction, names: string[]): Promise<Team[]> {
-    const existing = await trx("teams").whereIn("name", names);
-    const byName = new Map(existing.map((t) => [t.name, t]));
-
-    const teams: Team[] = [];
-    for (const name of names) {
-        const found = byName.get(name);
-        if (found) {
-            teams.push(found);
-            continue;
-        }
-        const [{ id }] = await trx("teams").insert({ name }).returning("id");
-        teams.push({ id, name, organization_id: null });
-    }
-    return teams;
 }
 
 /** Stage label of a round, counted from the final backwards (final, sf, qf, r16). */
@@ -182,18 +232,18 @@ function stageOf(round: number, totalRounds: number): Stage {
 }
 
 /**
- * Creates a single-elimination bracket for a modality from its first-round slots.
+ * Creates a single-elimination bracket for a modality of an edition from its first-round slots
+ * (team ids; every team must play the edition).
  *
  * A first-round match with an empty slot is a bye: the match is not created and
  * its team is placed directly in the corresponding round-2 slot. Which matches
  * get a bye is up to the caller (the frontend spreads them evenly).
  */
-export async function createBracket(modalityCode: string, slotsInput: unknown): Promise<BracketMatch[]> {
+export async function createBracket(ref: ModalityRef, slotsInput: unknown): Promise<BracketMatch[]> {
     const slots = parseSlots(slotsInput);
+    const modalityCode = ref.code;
 
-    const modality = await getModality(modalityCode);
-    if (!modality)
-        throw new ValidationError(`Modality ${modalityCode} not found`);
+    const modality = await getEditionModality(db, ref);
     if (modality.type !== "chaveamento")
         throw new ValidationError(`Modality ${modalityCode} is not of type chaveamento`);
 
@@ -201,17 +251,16 @@ export async function createBracket(modalityCode: string, slotsInput: unknown): 
     const totalRounds = Math.log2(size);
 
     await db.transaction(async (trx) => {
-        const existing = await trx("matches").where({ modality_code: modalityCode }).first();
+        const existing = await trx("matches").where({ edition_id: ref.editionId, modality_code: modalityCode }).first();
         if (existing)
             throw new ConflictError(`Modality ${modalityCode} already has a bracket`);
 
-        const names = slots.filter((s): s is string => s !== null);
-        const teams = await findOrCreateTeams(trx, names);
-        const teamByName = new Map(teams.map((t) => [t.name, t]));
+        await assertTeams(trx, ref.editionId, slots);
 
         async function insertMatch(round: number, position: number, nextIds: number[] | undefined, extra: Partial<Match> = {}) {
             const [{ id }] = await trx("matches")
                 .insert({
+                    edition_id: ref.editionId,
                     modality_code: modalityCode,
                     stage: stageOf(round, totalRounds),
                     round,
@@ -238,29 +287,25 @@ export async function createBracket(modalityCode: string, slotsInput: unknown): 
         for (let position = 0; position < size / 2; position++) {
             const a = slots[2 * position];
             const b = slots[2 * position + 1];
-            const teamA = a === null ? null : teamByName.get(a)!;
-            const teamB = b === null ? null : teamByName.get(b)!;
-
-            if (teamA && teamB) {
-                await insertMatch(1, position, nextIds, { team_a_id: teamA.id, team_b_id: teamB.id });
+            if (a !== null && b !== null) {
+                await insertMatch(1, position, nextIds, { team_a_id: a, team_b_id: b });
                 continue;
             }
 
-            const byeTeam = (teamA ?? teamB)!;
             const slot = position % 2 === 0 ? "team_a_id" : "team_b_id";
-            await trx("matches").where({ id: nextIds[Math.floor(position / 2)] }).update({ [slot]: byeTeam.id });
+            await trx("matches").where({ id: nextIds[Math.floor(position / 2)] }).update({ [slot]: a ?? b });
         }
     });
 
-    return getBracket(modalityCode);
+    return getBracket(ref);
 }
 
 // --- RESULTS ---
 
-async function findMatch(trx: Knex, modalityCode: string, matchId: number): Promise<Match> {
-    const match = await trx("matches").where({ id: matchId, modality_code: modalityCode }).first();
+async function findMatch(trx: Knex, { editionId, code }: ModalityRef, matchId: number): Promise<Match> {
+    const match = await trx("matches").where({ id: matchId, edition_id: editionId, modality_code: code }).first();
     if (!match)
-        throw new ValidationError(`Match ${matchId} not found in modality ${modalityCode}`);
+        throw new ValidationError(`Match ${matchId} not found in modality ${code}`);
     return match;
 }
 
@@ -294,7 +339,7 @@ export interface MatchResultInput {
  * Scores are free text so shootouts can be written as the organizers like; a walkover (WO)
  * is flagged separately so the scoring rules can tell it apart from a played match.
  */
-export async function setMatchResult(modalityCode: string, matchId: number, input: MatchResultInput): Promise<BracketMatch[]> {
+export async function setMatchResult(ref: ModalityRef, matchId: number, input: MatchResultInput): Promise<BracketMatch[]> {
     const scoreA = parseScore(input.scoreA, "scoreA");
     const scoreB = parseScore(input.scoreB, "scoreB");
     if (input.winner !== "a" && input.winner !== "b")
@@ -304,7 +349,7 @@ export async function setMatchResult(modalityCode: string, matchId: number, inpu
     const walkover = input.walkover === true;
 
     await db.transaction(async (trx) => {
-        const match = await findMatch(trx, modalityCode, matchId);
+        const match = await findMatch(trx, ref, matchId);
         if (match.team_a_id === null || match.team_b_id === null)
             throw new ValidationError("Both teams must be defined before setting a result");
 
@@ -321,13 +366,13 @@ export async function setMatchResult(modalityCode: string, matchId: number, inpu
         }
     });
 
-    return getBracket(modalityCode);
+    return getBracket(ref);
 }
 
 /** Clears the result of a match and removes its winner from the next match. */
-export async function clearMatchResult(modalityCode: string, matchId: number): Promise<BracketMatch[]> {
+export async function clearMatchResult(ref: ModalityRef, matchId: number): Promise<BracketMatch[]> {
     await db.transaction(async (trx) => {
-        const match = await findMatch(trx, modalityCode, matchId);
+        const match = await findMatch(trx, ref, matchId);
         if (match.winner_id === null)
             throw new ValidationError("Match has no result to clear");
 
@@ -343,7 +388,7 @@ export async function clearMatchResult(modalityCode: string, matchId: number): P
         }
     });
 
-    return getBracket(modalityCode);
+    return getBracket(ref);
 }
 
 // --- SCHEDULE ---
@@ -355,20 +400,17 @@ export interface MatchScheduleInput {
     mesarioTeamId?: unknown;
 }
 
-/** Looks up an optional integer id; null/undefined clears the field. */
-async function parseOptionalId(value: unknown, field: string, table: "venues" | "teams"): Promise<number | null> {
+/** An optional integer id; null/undefined clears the field. */
+function parseOptionalId(value: unknown, field: string): number | null {
     if (value === null || value === undefined)
         return null;
     if (typeof value !== "number" || !Number.isInteger(value))
         throw new ValidationError(`${field} must be an integer or null`);
-    const row = await db(table).where({ id: value }).first();
-    if (!row)
-        throw new ValidationError(`${table === "venues" ? "Venue" : "Team"} ${value} not found`);
     return value;
 }
 
 /** Sets when and where a match happens and which teams are its neutrals (redator, mesário). Each field can be null to clear it. */
-export async function setMatchSchedule(modalityCode: string, matchId: number, input: MatchScheduleInput): Promise<BracketMatch[]> {
+export async function setMatchSchedule(ref: ModalityRef, matchId: number, input: MatchScheduleInput): Promise<BracketMatch[]> {
     let scheduledAt: string | null = null;
     if (input.scheduledAt !== null && input.scheduledAt !== undefined) {
         const date = typeof input.scheduledAt === "string" ? new Date(input.scheduledAt) : new Date(NaN);
@@ -377,12 +419,15 @@ export async function setMatchSchedule(modalityCode: string, matchId: number, in
         scheduledAt = date.toISOString();
     }
 
-    const venueId = await parseOptionalId(input.venueId, "venueId", "venues");
-    const redatorTeamId = await parseOptionalId(input.redatorTeamId, "redatorTeamId", "teams");
-    const mesarioTeamId = await parseOptionalId(input.mesarioTeamId, "mesarioTeamId", "teams");
+    const venueId = parseOptionalId(input.venueId, "venueId");
+    const redatorTeamId = parseOptionalId(input.redatorTeamId, "redatorTeamId");
+    const mesarioTeamId = parseOptionalId(input.mesarioTeamId, "mesarioTeamId");
+    if (venueId !== null && !(await db("venues").where({ id: venueId }).first()))
+        throw new ValidationError(`Venue ${venueId} not found`);
 
     await db.transaction(async (trx) => {
-        const match = await findMatch(trx, modalityCode, matchId);
+        await assertTeams(trx, ref.editionId, [redatorTeamId, mesarioTeamId]);
+        const match = await findMatch(trx, ref, matchId);
         for (const [role, teamId] of [["redator", redatorTeamId], ["mesário", mesarioTeamId]] as const) {
             if (teamId !== null && (teamId === match.team_a_id || teamId === match.team_b_id))
                 throw new ValidationError(`The ${role} team cannot be one of the teams playing`);
@@ -392,5 +437,5 @@ export async function setMatchSchedule(modalityCode: string, matchId: number, in
             .update({ scheduled_at: scheduledAt, venue_id: venueId, redator_team_id: redatorTeamId, mesario_team_id: mesarioTeamId });
     });
 
-    return getBracket(modalityCode);
+    return getBracket(ref);
 }

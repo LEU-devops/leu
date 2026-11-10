@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { createBracket } from '../../services/competition'
+import type { ModalityRef } from '../../types/competition'
 import { getToken } from '../../services/auth'
 import {
     bracketSize,
@@ -62,13 +63,13 @@ function errorMessage(error: unknown): string {
 }
 
 interface Props {
-    code: string
+    modality: ModalityRef
     teams: Team[]
     onCreated: (matches: BracketMatch[]) => void
 }
 
 
-export default function BracketBuilder({ code, teams, onCreated }: Props) {
+export default function BracketBuilder({ modality, teams, onCreated }: Props) {
     const [teamCount, setTeamCount] = useState(8)
     // First-round slots, top to bottom. Slot 2k+1 of a bye match is never used.
     const [slots, setSlots] = useState<string[]>(() => Array(8).fill(''))
@@ -99,7 +100,8 @@ export default function BracketBuilder({ code, teams, onCreated }: Props) {
         setError(null)
         setIsSubmitting(true)
         try {
-            onCreated(await createBracket(code, slots.map((name, slot) => (isUsedSlot(slot) ? name : null))))
+            const idOf = (name: string) => teams.find((team) => team.name === name)?.id ?? null
+            onCreated(await createBracket(modality, slots.map((name, slot) => (isUsedSlot(slot) ? idOf(name) : null))))
         } catch (submitError) {
             setError(errorMessage(submitError))
         } finally {
@@ -169,7 +171,7 @@ export default function BracketBuilder({ code, teams, onCreated }: Props) {
                 </p>
             ) : null}
             {teams.length === 0 ? (
-                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-300">Nenhum time cadastrado ainda.</p>
+                <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-300">Esta edição ainda não tem times. Adicione as entidades participantes em Admin → Times da edição.</p>
             ) : null}
             {error ? <p className="rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p> : null}
 

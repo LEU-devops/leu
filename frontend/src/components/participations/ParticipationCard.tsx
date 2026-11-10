@@ -88,7 +88,7 @@ export default function ParticipationCard({ participation, canEdit, suggestions,
         const emails = athletes.map((athlete) => athlete.email)
         return run(() => {
             if (isCopa)
-                return setCopaAthletes(participation.modality!.code, participation.copa_team!.id, emails)
+                return setCopaAthletes(participation.edition!.id, participation.modality!.code, participation.copa_team!.id, emails)
             return updateParticipation(participation.id!, { ...detailsPayload(details), athletes: emails })
         })
     }

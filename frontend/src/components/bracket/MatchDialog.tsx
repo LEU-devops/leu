@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import { clearMatchResult, setMatchResult, setMatchSchedule } from '../../services/competition'
+import type { BracketMatch as MatchRow, ModalityRef } from '../../types/competition'
+
+/** The modality (in its edition) a match belongs to. */
+function modalityOf(match: MatchRow): ModalityRef {
+    return { code: match.modality_code, edition_id: match.edition_id }
+}
 import type { BracketMatch, Team, TimeSlot, Venue } from '../../types/competition'
 import Select from '../Select'
 import TeamLogo from './TeamLogo'
@@ -154,7 +160,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
     function saveSchedule() {
         const scheduledAt = date ? new Date(`${date}T${time || '00:00'}`).toISOString() : null
         return run(() =>
-            setMatchSchedule(match.modality_code, match.id, {
+            setMatchSchedule(modalityOf(match), match.id, {
                 scheduledAt,
                 venueId: venueId === 'none' ? null : Number(venueId),
                 redatorTeamId: redatorId === 'none' ? null : Number(redatorId),
@@ -306,7 +312,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                                 type="button"
                                 className={PRIMARY_BUTTON}
                                 disabled={isLocked || isSaving || winner === null}
-                                onClick={() => winner && run(() => setMatchResult(match.modality_code, match.id, { scoreA, scoreB, winner, walkover: isWalkover }))}
+                                onClick={() => winner && run(() => setMatchResult(modalityOf(match), match.id, { scoreA, scoreB, winner, walkover: isWalkover }))}
                             >
                                 Salvar resultado
                             </button>
@@ -315,7 +321,7 @@ export default function MatchDialog({ match, nextMatch, stage, venues, timeSlots
                                     type="button"
                                     className="rounded-xl border border-red-900/60 px-4 py-2 font-medium text-red-300 transition hover:bg-red-950/40 disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={isLocked || isSaving}
-                                    onClick={() => run(() => clearMatchResult(match.modality_code, match.id))}
+                                    onClick={() => run(() => clearMatchResult(modalityOf(match), match.id))}
                                 >
                                     Desfazer resultado
                                 </button>

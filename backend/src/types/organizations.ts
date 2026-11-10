@@ -3,6 +3,8 @@ export type OrganizationRole = "aluno" | "membro" | "conselheiro" | "diretor" | 
 export interface Organization {
     id: number;
     name: string;
+    /** Abbreviation shown in the Copas by default ("FEA"). */
+    short_name: string | null;
     description: string | null;
     gradient: string;
     logo_url: string | null;

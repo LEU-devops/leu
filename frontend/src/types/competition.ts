@@ -1,3 +1,4 @@
+import type { OrganizationSummary } from './sports'
 export type ModalityType = 'chaveamento' | 'fase_unica' | EventsModalityType
 
 /**
@@ -56,30 +57,51 @@ export interface ModalityEvent extends EventFlags {
     results: EventEntry[]
 }
 
-/** One Copa (e.g. "Copa Eng" 2026). Exactly one is current: the default of every Copa page. */
-export interface CopaEdition {
+/** A competition held every year: "Copa Eng", "Copa Bixo", "InterGestões"... */
+export interface Cup {
     id: number
     name: string
-    year: number
-    is_current: boolean
 }
 
+/** One year of a cup. Exactly one edition (of any cup) is current: the default of every Copa page. */
+export interface CopaEdition {
+    id: number
+    cup_id: number
+    cup_name: string
+    year: number
+    /** What people see: the custom name, else the cup's name. */
+    name: string
+    custom_name: string | null
+    is_current: boolean
+    /** Closed: the final results are saved. */
+    finished: boolean
+}
+
+/** A modality as played in one edition (GET /modalities?edition=). The code ("FM") is the same in every edition. */
 export interface Modality {
-    /** Internal key, unique across editions: use it in URLs and API calls. */
     code: string
-    /** The code people see ("FM"), unique within the edition. */
-    short_code: string
     edition_id: number
     name: string
     type: ModalityType
 }
 
-/** An AAA as it appears in the Copas, with its scoring adjustments in the edition it was loaded for. */
+/** Identifies a modality in an edition: what bracket and events calls need. */
+export type ModalityRef = Pick<Modality, 'code' | 'edition_id'>
+
+/** A catalog modality with the editions that have it (GET /modalities/catalog). */
+export interface CatalogModality {
+    code: string
+    name: string
+    type: ModalityType
+    edition_ids: number[]
+}
+
+/** An organization playing an edition, with its name and scoring adjustments there. `id` is the organization id. */
 export interface Team {
     id: number
+    /** Its name in the edition (e.g. "FEA"). */
     name: string
-    /** The AAA (organization) this Copa team is, when linked. */
-    organization_id: number | null
+    organization_name: string
     /** Supporters ("torcida") bonus earned. Used by the scoring page. */
     bonus_torcida: boolean
     /** Points subtracted from the team's total (0 = none). Used by the scoring page. */
@@ -107,6 +129,7 @@ export type MatchStatus = 'scheduled' | 'live' | 'finished' | 'walkover'
 /** A match as returned by GET /modalities/:code/bracket. */
 export interface BracketMatch {
     id: number
+    edition_id: number
     modality_code: string
     stage: Stage
     round: number
@@ -193,4 +216,26 @@ export function formatSchedule(iso: string | null): string | null {
     const day = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).format(date)
     const time = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date)
     return `${day} · ${time}`
+}
+
+/** An organization's place in the saved final results of an edition. */
+export interface ResultEntry {
+    organization: OrganizationSummary
+    /** Its name in that edition. */
+    name: string
+    position: number
+    points: number | null
+}
+
+/** The saved final results of an edition: overall and per modality. */
+export interface EditionResults {
+    edition: CopaEdition
+    overall: ResultEntry[]
+    modalities: { code: string, name: string, results: ResultEntry[] }[]
+}
+
+/** The podium of an edition (overall or of a modality), for the champions history. */
+export interface ChampionsRow {
+    edition: CopaEdition
+    podium: ResultEntry[]
 }

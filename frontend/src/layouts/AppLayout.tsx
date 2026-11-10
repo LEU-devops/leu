@@ -15,6 +15,7 @@ const publicLinks = [
     { to: '/atletismo', label: 'Atletismo' },
     { to: '/natacao', label: 'Natação' },
     { to: '/pontuacao', label: 'Máx e Mín' },
+    { to: '/campeoes', label: 'Campeões' },
 ]
 
 /** Only offered when logged in; the admin routes themselves require the management permission. */

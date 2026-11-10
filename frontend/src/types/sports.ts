@@ -56,7 +56,7 @@ export interface Participation {
     competition: string
     year: number
     edition: { id: number, name: string, year: number } | null
-    modality: { code: string, short_code: string, name: string } | null
+    modality: { code: string, name: string } | null
     copa_team: { id: number, name: string } | null
     /** 1 = ouro, 2 = prata, 3 = bronze, 4+ = position; null = participação (or a Copa still running). */
     placement: number | null

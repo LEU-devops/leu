@@ -112,7 +112,7 @@ export default function OrganizationCopasPage() {
                     {entries?.length === 0 ? (
                         <p className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-zinc-500">
                             A {organization.name} não está em nenhuma chave ou inscrição {edition ? `da ${editionLabel(edition)}` : 'desta edição'}.
-                            {canManage ? ' Se deveria estar, confira com a administração da Copa se o time dela está vinculado à atlética.' : ''}
+                            {canManage ? ' Se deveria estar, confira com a administração da Copa se ela está entre os times da edição.' : ''}
                         </p>
                     ) : null}
 

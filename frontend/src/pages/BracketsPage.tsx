@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { Link, NavLink, useParams } from 'react-router-dom'
 import EditionSelect from '../components/EditionSelect'
-import { useEdition } from '../contexts/edition'
+import { editionLabel, useEdition } from '../contexts/edition'
 import BracketBuilder from '../components/bracket/BracketBuilder'
 import BracketView from '../components/bracket/BracketView'
 import Loading from '../components/Loading'
 import { getBracket, getModalities, getTeams, getTimeSlots, getVenues } from '../services/competition'
 import { isEventsModality, type BracketMatch, type Modality, type Team, type TimeSlot, type Venue } from '../types/competition'
 
-/** Mounted with `key={modality.code}`, so every state below starts fresh when the modality changes. */
+/** Mounted with a key per edition and modality, so every state below starts fresh when the modality changes. */
 function ModalityContent({ modality }: { modality: Modality }) {
     const [matches, setMatches] = useState<BracketMatch[] | null>(null)
     const [teams, setTeams] = useState<Team[]>([])
@@ -20,7 +20,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
         if (modality.type !== 'chaveamento') return
         let cancelled = false
 
-        Promise.all([getBracket(modality.code), getTeams(modality.edition_id), getVenues(), getTimeSlots(modality.edition_id)])
+        Promise.all([getBracket(modality), getTeams(modality.edition_id), getVenues(), getTimeSlots(modality.edition_id)])
             .then(([bracket, allTeams, allVenues, allSlots]) => {
                 if (cancelled) return
                 setMatches(bracket)
@@ -35,7 +35,7 @@ function ModalityContent({ modality }: { modality: Modality }) {
         return () => {
             cancelled = true
         }
-    }, [modality.code, modality.type, modality.edition_id])
+    }, [modality])
 
     if (isEventsModality(modality.type))
         return (
@@ -54,14 +54,13 @@ function ModalityContent({ modality }: { modality: Modality }) {
     if (matches === null) return <Loading />
 
     if (matches.length === 0)
-        return <BracketBuilder key={modality.code} code={modality.code} teams={teams} onCreated={setMatches} />
+        return <BracketBuilder modality={modality} teams={teams} onCreated={setMatches} />
 
     return <BracketView matches={matches} venues={venues} timeSlots={timeSlots} teams={teams} onChange={setMatches} />
 }
 
 export default function BracketsPage() {
     const { code } = useParams()
-    const navigate = useNavigate()
     const { edition } = useEdition()
     const [loaded, setLoaded] = useState<{ editionId: number, modalities: Modality[] } | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -88,7 +87,7 @@ export default function BracketsPage() {
             <aside className="shrink-0 border-b border-white/10 bg-black/65 backdrop-blur md:w-64 md:border-r md:border-b-0">
                 <div className="px-5 pt-5 pb-3">
                     <h1 className="text-xl font-semibold tracking-tight text-zinc-50">Chaveamentos</h1>
-                    <EditionSelect className="mt-3" onChange={() => navigate('/chaveamentos')} />
+                    <EditionSelect className="mt-3" />
                 </div>
 
                 {error ? <p className="px-5 pb-4 text-sm text-red-300">{error}</p> : null}
@@ -106,7 +105,7 @@ export default function BracketsPage() {
                             }
                         >
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-xs font-bold tracking-wider">
-                                {modality.short_code}
+                                {modality.code}
                             </span>
                             <span className="truncate">{modality.name}</span>
                         </NavLink>
@@ -119,14 +118,16 @@ export default function BracketsPage() {
                 {selected ? (
                     <>
                         <div className="mb-6">
-                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{selected.short_code}</p>
+                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{selected.code}</p>
                             <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">{selected.name}</h2>
                         </div>
-                        <ModalityContent key={selected.code} modality={selected} />
+                        <ModalityContent key={`${selected.edition_id}-${selected.code}`} modality={selected} />
                     </>
                 ) : modalities ? (
                     <p className="text-sm text-zinc-400">
-                        {code ? 'Modalidade não encontrada.' : 'Selecione uma modalidade para ver o chaveamento.'}
+                        {code
+                            ? `${code.toUpperCase()} não faz parte ${edition ? `da ${editionLabel(edition)}` : 'desta edição'}. Escolha outra modalidade ao lado.`
+                            : 'Selecione uma modalidade para ver o chaveamento.'}
                     </p>
                 ) : null}
             </main>

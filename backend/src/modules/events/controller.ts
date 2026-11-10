@@ -1,6 +1,8 @@
 import { Knex } from "knex";
 import { db } from "../../services/db";
-import { Event, EventFlags, isEventsModality, Modality, Team } from "../../types/competition";
+import { Event, EventFlags, isEventsModality, ModalityInEdition, ModalityRef, Team } from "../../types/competition";
+import { getEditionModality } from "../modalities/controller";
+import { assertTeams, listTeams } from "../teams/controller";
 import { StandingsError } from "../standings/placement";
 import { athletesPerTeam, eventEntries, scoreEvents, type EventEntry, type EventInput, type EventsStandings } from "./scoring";
 
@@ -28,7 +30,7 @@ export interface EventView extends Event {
 
 /** Everything the events page of a modality needs. Every mutation responds with a fresh one. */
 export interface EventsView {
-    modality: Modality;
+    modality: ModalityInEdition;
     /** Registered teams, by name. */
     teams: Team[];
     events: EventView[];
@@ -39,21 +41,25 @@ export interface EventsView {
 
 // --- LOADING ---
 
-async function findEventsModality(trx: Knex, code: string): Promise<Modality> {
-    const modality = await trx("modalities").where({ code }).first();
-    if (!modality)
-        throw new NotFoundError(`Modality ${code} not found`);
+async function findEventsModality(trx: Knex, ref: ModalityRef): Promise<ModalityInEdition> {
+    const modality = await getEditionModality(trx, ref);
     if (!isEventsModality(modality.type))
-        throw new ValidationError(`Modality ${code} is not decided by events (type ${modality.type})`);
+        throw new ValidationError(`Modality ${ref.code} is not decided by events (type ${modality.type})`);
     return modality;
 }
 
+/** `where` clause of the rows (registrations, events) of a modality in an edition. */
+function inModality({ editionId, code }: ModalityRef, alias?: string) {
+    const prefix = alias ? `${alias}.` : "";
+    return { [`${prefix}edition_id`]: editionId, [`${prefix}modality_code`]: code };
+}
+
 /** Registered team ids of a modality, by team name. */
-export async function registeredTeamIds(trx: Knex, code: string): Promise<number[]> {
+export async function registeredTeamIds(trx: Knex, ref: ModalityRef): Promise<number[]> {
     const rows = await trx("registrations as r")
-        .join("teams as t", "t.id", "r.team_id")
-        .where("r.modality_code", code)
-        .orderBy("t.name")
+        .join("edition_organizations as t", (join) => join.on("t.organization_id", "r.team_id").andOn("t.edition_id", "r.edition_id"))
+        .where(inModality(ref, "r"))
+        .orderBy("t.display_name")
         .select("r.team_id");
     return rows.map((r) => r.team_id);
 }
@@ -63,12 +69,10 @@ function normalizeEvent(event: Event): Event {
     return { ...event, demonstrativa: Boolean(event.demonstrativa), revezamento: Boolean(event.revezamento), finished: Boolean(event.finished) };
 }
 
-/** Events of several modalities with their results, grouped by modality code, in display order. */
-export async function loadEvents(trx: Knex, codes: string[]): Promise<Map<string, EventWithResults[]>> {
-    const [events, results] = await Promise.all([
-        trx("events").whereIn("modality_code", codes).orderBy([{ column: "sort_order" }, { column: "id" }]),
-        trx("event_results").orderBy("position"),
-    ]);
+/** Events of several modalities of an edition with their results, grouped by modality code, in display order. */
+export async function loadEvents(trx: Knex, editionId: number, codes: string[]): Promise<Map<string, EventWithResults[]>> {
+    const events = await trx("events").where({ edition_id: editionId }).whereIn("modality_code", codes).orderBy([{ column: "sort_order" }, { column: "id" }]);
+    const results = events.length > 0 ? await trx("event_results").whereIn("event_id", events.map((e) => e.id)).orderBy("position") : [];
     const byEvent = new Map<number, EventWithResults>();
     const byModality = new Map<string, EventWithResults[]>(codes.map((c) => [c, []]));
     for (const row of events) {
@@ -103,13 +107,14 @@ function toView(event: EventWithResults): EventView {
     }
 }
 
-export async function getEventsView(code: string): Promise<EventsView> {
-    const modality = await findEventsModality(db, code);
-    const [teams, events] = await Promise.all([
-        db("registrations as r").join("teams as t", "t.id", "r.team_id").where("r.modality_code", code).orderBy("t.name").select("t.*"),
-        loadEvents(db, [code]).then((m) => m.get(code)!),
+export async function getEventsView(ref: ModalityRef): Promise<EventsView> {
+    const modality = await findEventsModality(db, ref);
+    const [registered, allTeams, events] = await Promise.all([
+        registeredTeamIds(db, ref),
+        listTeams(ref.editionId),
+        loadEvents(db, ref.editionId, [ref.code]).then((m) => m.get(ref.code)!),
     ]);
-    const normalizedTeams: Team[] = teams;
+    const normalizedTeams: Team[] = allTeams.filter((team) => registered.includes(team.id));
     return {
         modality,
         teams: normalizedTeams,
@@ -124,40 +129,36 @@ export async function getEventsView(code: string): Promise<EventsView> {
  * Replaces the set of registered teams. A team with results in any event cannot be removed:
  * clear its results first, so nothing disappears silently.
  */
-export async function setRegistrations(code: string, input: { teamIds?: unknown }): Promise<EventsView> {
+export async function setRegistrations(ref: ModalityRef, input: { teamIds?: unknown }): Promise<EventsView> {
     if (!Array.isArray(input.teamIds) || input.teamIds.some((id) => typeof id !== "number" || !Number.isInteger(id)))
         throw new ValidationError("teamIds must be an array of integer team ids");
     const teamIds = [...new Set(input.teamIds as number[])];
 
     await db.transaction(async (trx) => {
-        await findEventsModality(trx, code);
+        await findEventsModality(trx, ref);
 
-        const teams = await trx("teams").whereIn("id", teamIds).select("id");
-        const known = new Set(teams.map((t) => t.id));
-        const missing = teamIds.filter((id) => !known.has(id));
-        if (missing.length > 0)
-            throw new ValidationError(`Team${missing.length > 1 ? "s" : ""} ${missing.join(", ")} not found`);
+        await assertTeams(trx, ref.editionId, teamIds);
 
-        const current = await registeredTeamIds(trx, code);
+        const current = await registeredTeamIds(trx, ref);
         const removed = current.filter((id) => !teamIds.includes(id));
         if (removed.length > 0) {
             const withResults = await trx("event_results as er")
                 .join("events as e", "e.id", "er.event_id")
-                .join("teams as t", "t.id", "er.team_id")
-                .where("e.modality_code", code)
+                .join("edition_organizations as t", (join) => join.on("t.organization_id", "er.team_id").andOn("t.edition_id", "e.edition_id"))
+                .where(inModality(ref, "e"))
                 .whereIn("er.team_id", removed)
-                .distinct("t.name");
+                .distinct("t.display_name as name");
             if (withResults.length > 0)
                 throw new ConflictError(`${withResults.map((r) => r.name).join(", ")} already placed in an event; clear those results first`);
-            await trx("registrations").where({ modality_code: code }).whereIn("team_id", removed).delete();
+            await trx("registrations").where(inModality(ref)).whereIn("team_id", removed).delete();
         }
 
         const added = teamIds.filter((id) => !current.includes(id));
         if (added.length > 0)
-            await trx("registrations").insert(added.map((team_id) => ({ modality_code: code, team_id })));
+            await trx("registrations").insert(added.map((team_id) => ({ edition_id: ref.editionId, modality_code: ref.code, team_id })));
     });
 
-    return getEventsView(code);
+    return getEventsView(ref);
 }
 
 // --- EVENTS ---
@@ -192,49 +193,50 @@ function parseFlags(input: EventInputBody): Partial<EventFlags & Pick<Event, "fi
     return flags;
 }
 
-async function assertNameFree(trx: Knex, code: string, name: string, exceptId: number | null) {
-    const clash = await trx("events").where({ modality_code: code }).whereRaw("lower(name) = lower(?)", [name]).first();
+async function assertNameFree(trx: Knex, ref: ModalityRef, name: string, exceptId: number | null) {
+    const clash = await trx("events").where(inModality(ref)).whereRaw("lower(name) = lower(?)", [name]).first();
     if (clash && clash.id !== exceptId)
-        throw new ConflictError(`Event "${clash.name}" already exists in modality ${code}`);
+        throw new ConflictError(`Event "${clash.name}" already exists in modality ${ref.code}`);
 }
 
 /** Body: { name, demonstrativa?, revezamento? } (both default to false). The event goes to the end of the list. */
-export async function createEvent(code: string, input: EventInputBody): Promise<EventsView> {
+export async function createEvent(ref: ModalityRef, input: EventInputBody): Promise<EventsView> {
     const name = parseName(input.name);
     const { demonstrativa = false, revezamento = false } = parseFlags(input);
 
     await db.transaction(async (trx) => {
-        await findEventsModality(trx, code);
-        await assertNameFree(trx, code, name, null);
-        const last = await trx("events").where({ modality_code: code }).orderBy("sort_order", "desc").first();
+        await findEventsModality(trx, ref);
+        await assertNameFree(trx, ref, name, null);
+        const last = await trx("events").where(inModality(ref)).orderBy("sort_order", "desc").first();
         const sort_order = (last?.sort_order ?? -1) + 1;
-        await trx("events").insert({ modality_code: code, name, demonstrativa, revezamento, finished: false, sort_order });
+        await trx("events").insert({ edition_id: ref.editionId, modality_code: ref.code, name, demonstrativa, revezamento, finished: false, sort_order });
     });
 
-    return getEventsView(code);
+    return getEventsView(ref);
 }
 
-async function findEvent(trx: Knex, code: string, eventId: number): Promise<Event> {
-    const event = await trx("events").where({ id: eventId, modality_code: code }).first();
+async function findEvent(trx: Knex, ref: ModalityRef, eventId: number): Promise<Event> {
+    const event = await trx("events").where({ id: eventId, ...inModality(ref) }).first();
     if (!event)
-        throw new NotFoundError(`Event ${eventId} not found in modality ${code}`);
+        throw new NotFoundError(`Event ${eventId} not found in modality ${ref.code}`);
     return normalizeEvent(event);
 }
 
 /** Teams with more athletes in the event than `limit`, by name. */
 async function teamsOverLimit(trx: Knex, eventId: number, limit: number): Promise<string[]> {
     const rows = await trx("event_results as er")
-        .join("teams as t", "t.id", "er.team_id")
+        .join("events as e", "e.id", "er.event_id")
+        .join("edition_organizations as t", (join) => join.on("t.organization_id", "er.team_id").andOn("t.edition_id", "e.edition_id"))
         .where("er.event_id", eventId)
-        .groupBy("t.id", "t.name")
+        .groupBy("t.organization_id", "t.display_name")
         .havingRaw("count(*) > ?", [limit])
-        .orderBy("t.name")
-        .select("t.name");
+        .orderBy("t.display_name")
+        .select("t.display_name as name");
     return rows.map((r) => r.name);
 }
 
 /** Body: { name?, demonstrativa?, revezamento?, finished? }. Fields left out keep their value. */
-export async function updateEvent(code: string, eventId: number, input: EventInputBody): Promise<EventsView> {
+export async function updateEvent(ref: ModalityRef, eventId: number, input: EventInputBody): Promise<EventsView> {
     const changes: Partial<Pick<Event, "name" | "demonstrativa" | "revezamento" | "finished">> = parseFlags(input);
     if (input.name !== undefined)
         changes.name = parseName(input.name);
@@ -242,10 +244,10 @@ export async function updateEvent(code: string, eventId: number, input: EventInp
         throw new ValidationError("Provide name, demonstrativa, revezamento and/or finished");
 
     await db.transaction(async (trx) => {
-        await findEventsModality(trx, code);
-        const event = await findEvent(trx, code, eventId);
+        await findEventsModality(trx, ref);
+        const event = await findEvent(trx, ref, eventId);
         if (changes.name !== undefined)
-            await assertNameFree(trx, code, changes.name, event.id);
+            await assertNameFree(trx, ref, changes.name, event.id);
         if (changes.revezamento && !event.revezamento) {
             // A relay takes one athlete per team: refuse while a team has two placed.
             const over = await teamsOverLimit(trx, event.id, 1);
@@ -255,17 +257,17 @@ export async function updateEvent(code: string, eventId: number, input: EventInp
         await trx("events").where({ id: event.id }).update(changes);
     });
 
-    return getEventsView(code);
+    return getEventsView(ref);
 }
 
 /** Deletes the event and its results. */
-export async function deleteEvent(code: string, eventId: number): Promise<EventsView> {
+export async function deleteEvent(ref: ModalityRef, eventId: number): Promise<EventsView> {
     await db.transaction(async (trx) => {
-        await findEventsModality(trx, code);
-        const event = await findEvent(trx, code, eventId);
+        await findEventsModality(trx, ref);
+        const event = await findEvent(trx, ref, eventId);
         await trx("events").where({ id: event.id }).delete();
     });
-    return getEventsView(code);
+    return getEventsView(ref);
 }
 
 // --- RESULTS ---
@@ -275,7 +277,7 @@ export async function deleteEvent(code: string, eventId: number): Promise<Events
  * every result of the event: null leaves the position empty. Teams must be registered and may
  * appear up to twice (once in a relay): the second athlete scores nothing and takes no place.
  */
-export async function setEventResults(code: string, eventId: number, input: { positions?: unknown }): Promise<EventsView> {
+export async function setEventResults(ref: ModalityRef, eventId: number, input: { positions?: unknown }): Promise<EventsView> {
     if (!Array.isArray(input.positions))
         throw new ValidationError("positions must be an array of team ids (null for an empty position)");
     const positions = input.positions as unknown[];
@@ -285,8 +287,8 @@ export async function setEventResults(code: string, eventId: number, input: { po
     const results = positions.flatMap((id, index) => (id === null ? [] : [{ team_id: id as number, position: index + 1 }]));
 
     await db.transaction(async (trx) => {
-        await findEventsModality(trx, code);
-        const event = await findEvent(trx, code, eventId);
+        await findEventsModality(trx, ref);
+        const event = await findEvent(trx, ref, eventId);
         const limit = athletesPerTeam(event);
 
         const athletes = new Map<number, number>();
@@ -296,17 +298,17 @@ export async function setEventResults(code: string, eventId: number, input: { po
         if (over.length > 0)
             throw new ValidationError(`Team${over.length > 1 ? "s" : ""} ${over.join(", ")} ${over.length > 1 ? "appear" : "appears"} more than ${limit === 1 ? "once (a relay has one athlete per team)" : `${limit} times`}`);
 
-        const registered = await registeredTeamIds(trx, code);
+        const registered = await registeredTeamIds(trx, ref);
         if (positions.length > registered.length * limit)
             throw new ValidationError(`positions has ${positions.length} entries, but ${registered.length} registered teams can enter at most ${registered.length * limit}`);
         const unregistered = results.filter((r) => !registered.includes(r.team_id));
         if (unregistered.length > 0)
-            throw new ValidationError(`Team${unregistered.length > 1 ? "s" : ""} ${unregistered.map((r) => r.team_id).join(", ")} not registered in modality ${code}`);
+            throw new ValidationError(`Team${unregistered.length > 1 ? "s" : ""} ${unregistered.map((r) => r.team_id).join(", ")} not registered in modality ${ref.code}`);
 
         await trx("event_results").where({ event_id: event.id }).delete();
         if (results.length > 0)
             await trx("event_results").insert(results.map((r) => ({ event_id: event.id, ...r })));
     });
 
-    return getEventsView(code);
+    return getEventsView(ref);
 }

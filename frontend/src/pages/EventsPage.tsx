@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Navigate, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, NavLink, useParams } from 'react-router-dom'
 import EditionSelect from '../components/EditionSelect'
-import { useEdition } from '../contexts/edition'
+import { editionLabel, useEdition } from '../contexts/edition'
 import EventCard from '../components/events/EventCard'
 import EventsStandingsTable from '../components/events/EventsStandingsTable'
 import NewEventForm from '../components/events/NewEventForm'
@@ -13,7 +13,7 @@ import type { EventsModalityType, Modality, Team } from '../types/competition'
 
 const TITLES: Record<EventsModalityType, string> = { atletismo: 'Atletismo', natacao: 'Natação' }
 
-/** Mounted with `key={modality.code}`, so every state below starts fresh when the modality changes. */
+/** Mounted with a key per edition and modality, so every state below starts fresh when the modality changes. */
 function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: boolean }) {
     const [view, setView] = useState<EventsView | null>(null)
     const [allTeams, setAllTeams] = useState<Team[]>([])
@@ -21,7 +21,7 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
 
     useEffect(() => {
         let cancelled = false
-        Promise.all([getEventsView(modality.code), getTeams(modality.edition_id)])
+        Promise.all([getEventsView(modality), getTeams(modality.edition_id)])
             .then(([data, teams]) => {
                 if (cancelled) return
                 setView(data)
@@ -33,7 +33,7 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
         return () => {
             cancelled = true
         }
-    }, [modality.code, modality.edition_id])
+    }, [modality])
 
     if (error) return <p className="rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p>
     if (view === null) return <Loading />
@@ -48,12 +48,12 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
     return (
         <div className="space-y-8">
             <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{modality.short_code}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">{modality.code}</p>
                 <h2 className="text-2xl font-semibold tracking-tight text-zinc-50">{modality.name}</h2>
                 <p className="mt-1 text-sm text-zinc-400">{summary}</p>
             </div>
 
-            <RegistrationsSection code={modality.code} registered={view.teams} allTeams={allTeams} canEdit={canEdit} onChange={setView} />
+            <RegistrationsSection modality={modality} registered={view.teams} allTeams={allTeams} canEdit={canEdit} onChange={setView} />
 
             <section className="space-y-3">
                 <div>
@@ -79,14 +79,14 @@ function ModalityEvents({ modality, canEdit }: { modality: Modality; canEdit: bo
                     </p>
                 </div>
 
-                {canEdit ? <NewEventForm code={modality.code} onChange={setView} /> : null}
+                {canEdit ? <NewEventForm modality={modality} onChange={setView} /> : null}
 
                 {view.events.length === 0 ? (
                     <p className="text-sm text-zinc-500">Nenhuma prova cadastrada.</p>
                 ) : (
                     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         {view.events.map((event) => (
-                            <EventCard key={event.id} code={modality.code} event={event} teams={view.teams} canEdit={canEdit} onChange={setView} />
+                            <EventCard key={event.id} modality={modality} event={event} teams={view.teams} canEdit={canEdit} onChange={setView} />
                         ))}
                     </div>
                 )}
@@ -102,7 +102,6 @@ interface Props {
 /** Page of one events sport (atletismo or natação): its modalities as tabs, each with registrations, standings and events. */
 export default function EventsPage({ type }: Props) {
     const { code } = useParams()
-    const navigate = useNavigate()
     const { edition } = useEdition()
     const [loaded, setLoaded] = useState<{ key: string, modalities: Modality[] } | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -135,7 +134,7 @@ export default function EventsPage({ type }: Props) {
             <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">Provas</p>
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-50">{title}</h1>
-                <EditionSelect className="mt-3 w-56" onChange={() => navigate(`/${type}`)} />
+                <EditionSelect className="mt-3 w-56" />
             </div>
 
             {error ? <p className="rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">{error}</p> : null}
@@ -157,7 +156,7 @@ export default function EventsPage({ type }: Props) {
                                 `flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm transition ${isActive ? 'bg-red-950/50 text-zinc-50' : 'text-zinc-300 hover:bg-white/5'}`
                             }
                         >
-                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px] font-bold tracking-wider">{modality.short_code}</span>
+                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[11px] font-bold tracking-wider">{modality.code}</span>
                             <span className="whitespace-nowrap">{modality.name}</span>
                         </NavLink>
                     ))}
@@ -165,9 +164,9 @@ export default function EventsPage({ type }: Props) {
             ) : null}
 
             {selected ? (
-                <ModalityEvents key={selected.code} modality={selected} canEdit={canEdit} />
+                <ModalityEvents key={`${selected.edition_id}-${selected.code}`} modality={selected} canEdit={canEdit} />
             ) : modalities && modalities.length > 0 && code ? (
-                <p className="text-sm text-zinc-400">Modalidade não encontrada.</p>
+                <p className="text-sm text-zinc-400">{code.toUpperCase()} não faz parte {edition ? `da ${editionLabel(edition)}` : 'desta edição'}. Escolha outra modalidade acima.</p>
             ) : null}
         </main>
     )
